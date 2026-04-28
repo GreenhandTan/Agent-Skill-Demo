@@ -132,6 +132,40 @@ Skill 的说明字段必须覆盖触发场景，例如：
 - `scripts/feishu_client.py` 仅作为协议适配层，负责任务载荷归一化和结果封装。
 - Skill 只依赖结构化输入输出，不直接耦合飞书 SDK、Webhook 或轮询逻辑。
 
+```mermaid
+flowchart TB
+  A[OpenClaw / 飞书通讯插件\n负责任务收发]
+  B[SKILL.md\n技能入口]
+  C[scripts/feishu_client.py\n协议适配层]
+  D[scripts/workflow.py\n流程编排]
+  E[scripts/browser_adapter.py\nPlaywright 浏览器层]
+  F[scripts/session_manager.py\nstorage_state 持久化]
+  G[Taobao 网站\n搜索 / 登录 / 加购]
+  H[OpenClaw Result Envelope\n结果封装回传]
+
+  A --> B
+  B --> C
+  C --> D
+  D --> E
+  D --> F
+  E --> G
+  F --> E
+  D --> H
+  H --> A
+
+  subgraph Skill[Skill 内部职责]
+    C
+    D
+    E
+    F
+  end
+
+  subgraph External[外部依赖]
+    A
+    G
+  end
+```
+
 ## 6. 核心流程设计
 
 ### 6.1 飞书任务接收
