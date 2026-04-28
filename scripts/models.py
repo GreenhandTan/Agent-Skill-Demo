@@ -73,8 +73,27 @@ class WorkflowResult:
             "search_status": self.search_status,
             "filter_status": self.filter_status,
             "cart_status": self.cart_status,
-            "matched_items": [item.__dict__ for item in self.matched_items],
+            "matched_items": [
+                {
+                    "title": item.title,
+                    "item_id": item.item_id,
+                    "price": item.price,
+                    "rating": item.rating,
+                    "url": item.url,
+                    "cart_added": item.cart_added,
+                }
+                for item in self.matched_items
+            ],
             "evidence": self.evidence,
-            "steps": [step.__dict__ for step in self.steps],
+            "steps": [
+                {
+                    "name": step.name,
+                    "status": step.status,
+                    "message": step.message,
+                    "artifact": step.artifact,
+                    "details": step.details,
+                }
+                for step in self.steps
+            ],
             "error": self.error,
         }

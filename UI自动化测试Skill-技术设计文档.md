@@ -11,12 +11,13 @@
 ### 2.1 标准流程
 
 1. 任务下发：通过飞书接受测试任务指令。
-2. 浏览器自动化：打开 `www.taobao.com` 并进入自动化执行态。
-3. 用户登录：完成淘宝账号登录。
-4. 商品搜索：搜索关键词“索尼耳机”。
-5. 智能筛选：筛选好评率大于等于 99% 的商品。
-6. 购物车操作：将符合条件的商品加入购物车。
-7. 结果反馈：将执行结果回传飞书。
+2. 浏览器自动化：启动 Chromium（集成 playwright-stealth 反检测），打开 `www.taobao.com`。
+3. 会话恢复：优先加载已持久化的 `storage_state` 会话文件；已登录则跳过手动登录。
+4. 用户登录：会话失效或不存在时，等待用户在浏览器窗口中手动完成登录，随后自动持久化会话。
+5. 商品搜索：在搜索框输入关键词（拟人化打字 + 贝塞尔鼠标轨迹），提交搜索，附带滑动验证码自动求解。
+6. 智能筛选：进入商品详情页提取好评率、商品ID、价格，仅保留好评率严格大于阈值的商品。
+7. 购物车操作：将符合条件的商品加入购物车，并导航到购物车页面核验加购结果。
+8. 结果反馈：将执行结果回传飞书。
 
 ### 2.2 关键约束
 
@@ -24,6 +25,8 @@
 - 必须将飞书、浏览器、淘宝页面操作拆分为可替换适配层。
 - 必须支持中断恢复、失败重试、结构化结果输出。
 - 涉及登录、验证码、风控时，不应尝试绕过安全机制，只允许请求用户接管。
+- 浏览器操作采用拟人化策略（贝塞尔鼠标轨迹、随机延迟、分段滚动）以降低风控触发概率。
+- 滑动验证码采用 ML（ddddocr）+ OpenCV 双模自动求解，失败时退化为人工接管。
 
 ## 3. 设计原则
 
@@ -140,8 +143,9 @@ flowchart TB
   D[scripts/workflow.py\n流程编排]
   E[scripts/browser_adapter.py\nPlaywright 浏览器层]
   F[scripts/session_manager.py\nstorage_state 持久化]
-  G[Taobao 网站\n搜索 / 登录 / 加购]
-  H[OpenClaw Result Envelope\n结果封装回传]
+  G[scripts/slider_solver.py\n滑动验证码求解]
+  H[Taobao 网站\n搜索 / 登录 / 加购]
+  I[OpenClaw Result Envelope\n结果封装回传]
 
   A --> B
   B --> C
@@ -149,15 +153,23 @@ flowchart TB
   D --> E
   D --> F
   E --> G
+  E --> H
   F --> E
-  D --> H
-  H --> A
+  G --> E
+  D --> I
+  I --> A
 
   subgraph Skill[Skill 内部职责]
     C
     D
     E
     F
+    G
+  end
+
+  subgraph External[外部依赖]
+    A
+    H
   end
 
   subgraph External[外部依赖]
@@ -211,7 +223,7 @@ flowchart TB
 
 ### 6.5 智能筛选
 
-需要在商品列表中识别好评率大于等于 99% 的商品。
+需要在商品列表中识别好评率严格大于阈值的商品（默认 95%）。
 
 推荐实现方式：
 
@@ -222,9 +234,11 @@ flowchart TB
 筛选逻辑：
 
 ```text
-if praise_rate >= 0.99 then keep
+if praise_rate > threshold then keep
 else skip
 ```
+
+注：代码中使用 `<=` 比较，恰好等于阈值的商品被排除（严格大于语义）。
 
 如果列表页无法直接获取好评率，则需要：
 
@@ -301,7 +315,20 @@ else skip
 }
 ```
 
-### 8.2 ExecutionResult
+### 8.2 MatchedItem
+
+```json
+{
+  "title": "string",
+  "item_id": "string|null",
+  "price": "string|null",
+  "rating": 0.96,
+  "url": "string|null",
+  "cart_added": false
+}
+```
+
+### 8.3 ExecutionResult
 
 ```json
 {
@@ -311,7 +338,7 @@ else skip
   "login_status": "success|waiting_manual|failed",
   "search_status": "success|failed",
   "filter_status": "success|failed",
-  "cart_status": "success|partial_success|failed",
+  "cart_status": "success|empty|error|failed",
   "matched_items": [],
   "evidence": [],
   "error": null
@@ -357,6 +384,24 @@ else skip
 
 - 限制候选商品数量。
 - 并发仅用于读操作，写操作保持串行。
+
+### 9.5 风控滑动验证码
+
+风险：频繁页面切换可能触发淘宝风控系统的 GeeTest 滑动验证码。
+
+对策：
+
+- 采用 ddddocr ML 模型 + OpenCV Canny 边缘检测双模自动求解。
+- 所有浏览器操作增加拟人化行为：贝塞尔鼠标轨迹、随机延迟 (2-5s)、分段滚动模拟浏览、随机鼠标移动。
+- 自动求解失败后回退为人工接管。
+
+### 9.6 会话数据路径漂移
+
+风险：相对路径随 CWD 变化导致会话文件无法恢复。
+
+对策：
+
+- 所有相对路径（session_state_path、artifact_dir）基于 `__file__.parent` 解析为脚本目录绝对路径。
 
 ## 10. 测试方案
 
@@ -408,16 +453,21 @@ else skip
 Agent_Demo/
   SKILL.md
   requirements.txt
-  scripts/
-    browser_adapter.py
-    config.py
-    feishu_client.py
-    models.py
-    run_workflow.py
-    session_flow.py
-    session_manager.py
-    workflow.py
   UI自动化测试Skill-技术设计文档.md
+  scripts/
+    __init__.py
+    browser_adapter.py       # Playwright + Stealth 浏览器适配层
+    config.py                 # OpenClaw Skill 配置
+    feishu_client.py          # 飞书协议适配层
+    models.py                 # 数据模型 (TaskContext, MatchedItem, WorkflowResult)
+    run_workflow.py           # CLI 入口
+    session_flow.py           # 会话恢复/持久化流程
+    session_manager.py        # storage_state 文件读写
+    slider_solver.py          # ddddocr + OpenCV 滑动验证码求解
+    workflow.py               # 状态机流程编排
+    .cache/ui-automation-test/
+      taobao-session.json     # 持久化会话
+      artifacts/              # 截图证据
 ```
 
 ## 14. 建议的 SKILL.md 说明要点
@@ -440,10 +490,46 @@ Agent_Demo/
 
 ## 15. 当前实现状态
 
-- 浏览器层已接入 Playwright，同步支持 `storage_state` 恢复与保存。
-- 会话层已支持成功登录后的自动持久化与下次恢复。
-- 飞书层已降级为 OpenClaw 协议适配，不再承担具体通讯传输。
-- 仓库已平铺到项目根目录，便于 OpenClaw 直接按根目录读取和执行。
+### 已完成的功能
+
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| 飞书协议适配 | ✅ | OpenClaw 协议适配层，payload 归一化 & report envelope 封装 |
+| 浏览器启动 | ✅ | Chromium + playwright-stealth 反检测（20 项 evasiion patch） |
+| 会话恢复/持久化 | ✅ | storage_state 文件自动读写，路径基于 scripts/ 目录解析 |
+| 手动登录 | ✅ | 弹出浏览器窗口，自动检测登录成功（最长等待 300s） |
+| 商品搜索 | ✅ | 拟人化打字 + 贝塞尔鼠标轨迹 + 多重提交回退链 |
+| 好评率提取 | ✅ | 9 种正则模式 + 多 CSS 选择器 + 详情页懒加载滚动触发 |
+| 商品 ID 提取 | ✅ | 从详情页 URL `?id=` 参数提取 |
+| 价格提取 | ✅ | 多 CSS 选择器覆盖 Tmall/Taobao（`#J_StrPr498`、`.tm-price` 等） |
+| 加购 | ✅ | 拟人化点击 + 结果校验 |
+| 购物车核验 | ✅ | 导航到 `cart.taobao.com` 并统计实际商品行数 |
+| 滑动验证码求解 | ✅ | ddddocr ML 目标检测 + OpenCV 模板匹配双模，含贝塞尔拖拽轨迹 |
+| 拟人化行为 | ✅ | 随机延迟、分段滚动、随机鼠标移动、浏览模拟 |
+| 截图证据 | ✅ | 搜索页 + 购物车页全屏截图 |
+| 结构化结果输出 | ✅ | JSON 包含所有步骤记录、商品详情、状态码 |
+
+### 活跃测试记录
+
+最近两次端到端测试（搜索"苹果手机"，阈值 0.95，最多 10 个候选）：
+
+| 指标 | 第一次（修复前） | 第二次（修复后） |
+|------|----------------|----------------|
+| 会话恢复 | ❌ 路径漂移未找到 | ✅ 成功恢复 |
+| 登录 | ✅ 手动登录 ~27s | ✅ 跳过（会话有效） |
+| 搜索 | ⚠️ 兜底直接 URL | ⚠️ 兜底直接 URL（搜索表单交互不稳定） |
+| 好评率提取率 | 4/10 | 7/10 |
+| 加入购物车 | 3 件 | 7 件 |
+| CAPTCHA 触发 | 未触发 | 未触发 |
+| item_id 提取 | ❌ 全部为空 | ✅ 全部填充 |
+| price 提取 | ❌ 全部为空 | ✅ 全部填充 |
+| 购物车核验 | ❌ 假成功 | ✅ 实际计数 70 件 |
+
+### 已知待优化项
+
+- 搜索表单交互在部分环境下仍回退为直接 URL 导航
+- 非 Tmall（item.taobao.com）商品详情页的好评率提取仍有 ~30% 失败率
+- 价格范围（如 ¥5999-7999）需要提取逻辑进一步优化
 
 ## 16. 结论
 

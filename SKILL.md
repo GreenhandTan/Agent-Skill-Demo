@@ -51,6 +51,8 @@ description: "适用于飞书任务下发后，需要在淘宝进行浏览器自
 - 优先使用确定性的浏览器操作，而不是自由发挥式推理。
 - 对短暂的导航或渲染失败使用重试。
 - 优先恢复缓存会话，只有在会话不存在或失效时才进入人工登录。
+- 每次进入淘宝后，必须先确认当前登录态；未登录时不得继续搜索、筛选或加购。
+- 首次登录或会话失效时，必须提醒用户在浏览器中手动完成登录，然后立即提取 `storage_state` 并保存。
 - 当登录、验证码或安全校验出现时，立即暂停并请求人工接管。
 - 不尝试绕过平台安全控制。
 
@@ -113,7 +115,7 @@ description: "适用于飞书任务下发后，需要在淘宝进行浏览器自
 ## 失败处理
 
 - `TASK_INVALID`: Missing or malformed task fields.
-- `LOGIN_REQUIRED`: Human takeover required.
+- `LOGIN_REQUIRED`: 未登录，需要用户先手动完成首次登录并保存会话。
 - `SEARCH_FAILED`: Search page could not be loaded or parsed.
 - `FILTER_FAILED`: Ratings could not be extracted reliably.
 - `CART_FAILED`: Item could not be added to cart.

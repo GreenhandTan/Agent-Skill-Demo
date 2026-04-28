@@ -52,42 +52,87 @@ class UiAutomationWorkflow:
             self.browser.navigate_to_taobao()
             result.add_step("taobao_opened", "success", url="https://www.taobao.com")
 
-            logged_in = self.browser.is_logged_in() if not restored else True
-            if logged_in:
-                result.login_status = "success"
-                result.add_step("login_check", "success", message="session already logged in or restored")
-            else:
-                result.login_status = self.browser.ensure_login(context.manual_approval_required)
-                result.add_step("login_flow", result.login_status, message="login flow executed")
-                if result.login_status != "success":
+            # Always verify login state — session restore does NOT guarantee login
+            logged_in = self.browser.is_logged_in()
+            if not logged_in:
+                result.login_status = "waiting_manual"
+                result.add_step(
+                    "login_check",
+                    "blocked",
+                    message="淘宝未登录，请在弹出的浏览器窗口中手动完成登录",
+                )
+
+                if not context.manual_approval_required:
                     result.status = "partial_success"
                     result.error = {
                         "code": "LOGIN_REQUIRED",
-                        "message": "Manual takeover is required before continuing.",
+                        "message": "淘宝未登录，需要先手动完成登录并保存会话。",
                         "step": "login",
                     }
-                    result.add_step("workflow_stopped", "blocked", message="waiting for manual takeover")
+                    result.add_step("workflow_stopped", "blocked", message="waiting for manual login and session capture")
                     return result
 
+                # Block and wait for user to complete manual login
+                self.browser.ensure_login(manual_approval_required=True, force_manual=True)
+                logged_in = self.browser.is_logged_in()
+                if not logged_in:
+                    result.status = "partial_success"
+                    result.error = {
+                        "code": "LOGIN_REQUIRED",
+                        "message": "登录超时或失败，请重试。",
+                        "step": "login",
+                    }
+                    result.add_step("workflow_stopped", "blocked", message="login timeout or failed")
+                    return result
+
+                result.login_status = "success"
+                result.add_step("login_flow", "success", message="manual login completed")
                 if context.session_auto_save:
                     session_flow.capture_after_login()
                     result.session_status = "captured"
                     result.add_step("session_capture", "success", message="session persisted after login")
+            else:
+                result.login_status = "success"
+                result.add_step("login_check", "success", message="登录状态已确认")
+                if context.session_auto_save and context.session_strategy in {"storage_state", "cookie_localstorage"}:
+                    session_flow.capture_after_login()
+                    result.session_status = "captured"
+                    result.add_step("session_capture", "success", message="session persisted from active login state")
 
             result.search_status = self.browser.search(context.search_keyword)
             result.add_step("search_submitted", result.search_status, keyword=context.search_keyword)
             result.search_status = self.browser.wait_for_results()
             result.add_step("search_results_ready", result.search_status)
+
+            if not self.browser.ensure_search_access(context.manual_approval_required):
+                result.status = "partial_success"
+                result.error = {
+                    "code": "SEARCH_BLOCKED",
+                    "message": "Taobao risk control is blocking search results. Complete manual verification and retry.",
+                    "step": "search",
+                }
+                result.add_step("search_blocked", "blocked", message="waiting for manual verification")
+                return result
+
             result.evidence.append(self.browser.capture_evidence("search_results"))
 
-            candidates = self.browser.collect_candidates(context.max_candidates, context.rating_threshold)
+            candidates = self.browser.collect_candidates(context.search_keyword, context.max_candidates, context.rating_threshold)
             result.filter_status = "success"
             result.add_step("candidates_collected", "success", candidate_count=len(candidates))
 
             for item in candidates:
-                if item.rating is None or item.rating < context.rating_threshold:
-                    result.add_step("candidate_skipped", "skipped", message=item.title, rating=item.rating or -1)
+                # Visit product detail page to extract rating (search results don't show it)
+                self.browser.enrich_item_rating(item)
+
+                if item.rating is not None and item.rating <= context.rating_threshold:
+                    result.add_step("candidate_skipped", "skipped",
+                                    message=item.title, rating=item.rating)
                     continue
+                if item.rating is None:
+                    result.add_step("candidate_skipped", "skipped",
+                                    message=f"{item.title} (好评率未知)", rating=-1)
+                    continue
+
                 if self.browser.add_to_cart(item):
                     result.matched_items.append(item)
                     result.add_step("item_added", "success", message=item.title, item_id=item.item_id or "")

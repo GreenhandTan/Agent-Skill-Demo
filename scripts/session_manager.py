@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+_SCRIPTS_DIR = Path(__file__).parent.resolve()
+
 
 @dataclass(slots=True)
 class SessionSnapshot:
@@ -13,7 +15,10 @@ class SessionSnapshot:
 
 class SessionManager:
     def __init__(self, session_state_path: str) -> None:
-        self.session_state_path = Path(session_state_path)
+        path = Path(session_state_path)
+        if not path.is_absolute():
+            path = _SCRIPTS_DIR / path
+        self.session_state_path = path
 
     def exists(self) -> bool:
         return self.session_state_path.exists()
