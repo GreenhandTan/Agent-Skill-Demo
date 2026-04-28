@@ -122,6 +122,16 @@ Skill 的说明字段必须覆盖触发场景，例如：
 
 负责把执行结果写回飞书，包括简版摘要和证据链接。
 
+### 5.5 OpenClaw 通讯边界
+
+如果 OpenClaw 已经接入飞书通讯插件，则通讯层由 OpenClaw 统一负责，Skill 只需要处理进入工作流的任务载荷以及返回给 OpenClaw 的结果封装。
+
+该设计下：
+
+- 飞书消息收发不在 Skill 内部实现。
+- `scripts/feishu_client.py` 仅作为协议适配层，负责任务载荷归一化和结果封装。
+- Skill 只依赖结构化输入输出，不直接耦合飞书 SDK、Webhook 或轮询逻辑。
+
 ## 6. 核心流程设计
 
 ### 6.1 飞书任务接收
@@ -221,6 +231,8 @@ else skip
 - 失败步骤和原因
 - 关键截图或证据链接
 
+如果由 OpenClaw 承担飞书通讯，则 Skill 应返回结构化 report envelope，由 OpenClaw 完成实际消息投递。
+
 消息示例：
 
 ```json
@@ -268,7 +280,10 @@ else skip
   "rating_threshold": 0.99,
   "max_candidates": 5,
   "need_screenshot": true,
-  "manual_approval_required": true
+  "manual_approval_required": true,
+  "session_state_path": ".cache/ui-automation-test/taobao-session.json",
+  "session_strategy": "storage_state",
+  "session_auto_save": true
 }
 ```
 
@@ -278,6 +293,7 @@ else skip
 {
   "task_id": "string",
   "status": "success|partial_success|failed",
+  "session_status": "restored|captured|missing|unknown",
   "login_status": "success|waiting_manual|failed",
   "search_status": "success|failed",
   "filter_status": "success|failed",
@@ -375,14 +391,19 @@ else skip
 ## 13. 建议的 Skill 目录结构
 
 ```text
-.github/
-  skills/
-    ui-automation-test/
-      SKILL.md
-      examples/
-        feishu-task.sample.json
-      docs/
-        technical-design.md
+Agent_Demo/
+  SKILL.md
+  requirements.txt
+  scripts/
+    browser_adapter.py
+    config.py
+    feishu_client.py
+    models.py
+    run_workflow.py
+    session_flow.py
+    session_manager.py
+    workflow.py
+  UI自动化测试Skill-技术设计文档.md
 ```
 
 ## 14. 建议的 SKILL.md 说明要点
@@ -403,6 +424,13 @@ else skip
 - 登录与验证码场景允许人工接管。
 - 不执行任何绕过风控的行为。
 
-## 15. 结论
+## 15. 当前实现状态
+
+- 浏览器层已接入 Playwright，同步支持 `storage_state` 恢复与保存。
+- 会话层已支持成功登录后的自动持久化与下次恢复。
+- 飞书层已降级为 OpenClaw 协议适配，不再承担具体通讯传输。
+- 仓库已平铺到项目根目录，便于 OpenClaw 直接按根目录读取和执行。
+
+## 16. 结论
 
 这个 Skill 的核心不是“把提示词写长”，而是把 UI 自动化拆成可执行、可恢复、可回传的状态机。只要把飞书接入、浏览器自动化、商品筛选和结果回传四个边界层分开，就可以稳定兼容 OpenClaw，并支持后续扩展到更多站点和更多筛选条件。
