@@ -7,3 +7,5 @@ venv/
 env/
 .playwright/
 .github/**/__pycache__/
+.claude/
+task_test.json
