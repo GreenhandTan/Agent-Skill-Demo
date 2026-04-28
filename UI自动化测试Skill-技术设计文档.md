@@ -141,17 +141,7 @@ Skill 的说明字段必须覆盖触发场景，例如：
 3. 校验字段完整性。
 4. 生成执行上下文并启动工作流。
 
-建议任务消息格式如下：
-
-```json
-{
-  "task_id": "UI-20260428-001",
-  "search_keyword": "索尼耳机",
-  "rating_threshold": 0.99,
-  "target_platform": "taobao",
-  "report_channel": "feishu"
-}
-```
+任务进入 Skill 时应由 OpenClaw 注入标准化 payload，Skill 只依赖字段契约，不依赖具体示例。
 
 ### 6.2 浏览器初始化
 
@@ -233,17 +223,7 @@ else skip
 
 如果由 OpenClaw 承担飞书通讯，则 Skill 应返回结构化 report envelope，由 OpenClaw 完成实际消息投递。
 
-消息示例：
-
-```json
-{
-  "task_id": "UI-20260428-001",
-  "status": "success",
-  "matched_items": 3,
-  "added_to_cart": 2,
-  "evidence": ["screenshot_1.png", "screenshot_2.png"]
-}
-```
+回传结果应由 OpenClaw 按统一 report envelope 投递，不需要在 Skill 文档中固定某个示例 JSON。
 
 ## 7. 状态机设计
 

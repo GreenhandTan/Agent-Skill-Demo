@@ -67,23 +67,6 @@ class FeishuClient:
             "metadata": envelope.metadata,
         }
 
-    def fetch_task_message_id(self, payload: dict[str, Any]) -> str:
-        message_id = payload.get("feishu_message_id")
-        if not message_id:
-            raise ValueError("feishu_message_id is required when fetching task message")
-        return str(message_id)
-
-    def fetch_task_message(self, message_id: str) -> dict[str, Any]:
-        return {
-            "feishu_message_id": message_id,
-            "task_id": message_id,
-            "search_keyword": "索尼耳机",
-            "rating_threshold": 0.99,
-            "max_candidates": 5,
-            "need_screenshot": True,
-            "manual_approval_required": True,
-        }
-
     def normalize_task_payload(self, payload: dict[str, Any] | None) -> dict[str, Any]:
         if payload is None:
             return {}
