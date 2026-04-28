@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+
+@dataclass(slots=True)
+class OpenClawSkillConfig:
+    task_file: Path | None = None
+    task_id: str | None = None
+    feishu_message_id: str | None = None
+    search_keyword: str = "索尼耳机"
+    rating_threshold: float = 0.99
+    max_candidates: int = 5
+    need_screenshot: bool = True
+    manual_approval_required: bool = True
+    report_channel: str = "feishu"
+    browser_name: str = "chromium"
+    session_state_path: str = ".cache/ui-automation-test/taobao-session.json"
+    session_strategy: str = "storage_state"
+    session_auto_save: bool = True
+    no_security_bypass: bool = True
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> "OpenClawSkillConfig":
+        return cls(
+            task_id=payload.get("task_id"),
+            feishu_message_id=payload.get("feishu_message_id"),
+            search_keyword=str(payload.get("search_keyword", "索尼耳机")),
+            rating_threshold=float(payload.get("rating_threshold", 0.99)),
+            max_candidates=int(payload.get("max_candidates", 5)),
+            need_screenshot=bool(payload.get("need_screenshot", True)),
+            manual_approval_required=bool(payload.get("manual_approval_required", True)),
+            report_channel=str(payload.get("report_channel", "feishu")),
+            browser_name=str(payload.get("constraints", {}).get("browser", "chromium")),
+            session_state_path=str(payload.get("session_state_path", ".cache/ui-automation-test/taobao-session.json")),
+            session_strategy=str(payload.get("session_strategy", "storage_state")),
+            session_auto_save=bool(payload.get("session_auto_save", True)),
+            no_security_bypass=bool(payload.get("constraints", {}).get("no_security_bypass", True)),
+        )

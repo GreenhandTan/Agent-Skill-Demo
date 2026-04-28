@@ -1,0 +1,1 @@
+"""UI automation test skill scripts."""
