@@ -1,5 +1,5 @@
 ---
-name: ui-automation-test
+name: taobao-skill-test
 description: "适用于飞书任务下发后，需要在淘宝进行浏览器自动化的场景，包括登录、商品搜索、按好评率筛选、加入购物车以及回传结果；keywords: Feishu, Taobao, login, search, cart, report"
 ---
 
