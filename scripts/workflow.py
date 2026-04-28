@@ -111,6 +111,6 @@ class UiAutomationWorkflow:
         finally:
             self.browser.close()
 
-    def report(self, payload: dict[str, Any], result: WorkflowResult) -> None:
+    def report(self, payload: dict[str, Any], result: WorkflowResult) -> dict[str, Any]:
         report_to = payload.get("report_to")
-        self.feishu_client.send_report(report_to, result.to_dict())
+        return self.feishu_client.send_report(report_to, result.to_dict())

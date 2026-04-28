@@ -54,6 +54,12 @@ description: "适用于飞书任务下发后，需要在淘宝进行浏览器自
 - 当登录、验证码或安全校验出现时，立即暂停并请求人工接管。
 - 不尝试绕过平台安全控制。
 
+## 通讯边界
+
+- 如果 OpenClaw 已经接入飞书通讯插件，则由 OpenClaw 负责消息收发。
+- 这个 Skill 只负责解析进入的任务 payload，以及构造回传给 OpenClaw 的结果封装。
+- `scripts/feishu_client.py` 只做 payload 归一化和报告封装，不直接调用飞书 SDK。
+
 ## 依赖与启动约定
 
 - Python 3.11 或更高版本。

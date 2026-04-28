@@ -65,9 +65,18 @@ def main() -> int:
     workflow = UiAutomationWorkflow(feishu_client, browser)
 
     result = workflow.run(payload)
-    workflow.report(payload, result)
+    report_envelope = workflow.report(payload, result)
 
-    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            {
+                "result": result.to_dict(),
+                "report": report_envelope,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0 if result.status in {"success", "partial_success"} else 2
 
 
