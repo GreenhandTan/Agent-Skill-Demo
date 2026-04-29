@@ -9,3 +9,4 @@ env/
 .github/**/__pycache__/
 .claude/
 task_test.json
+docs/
