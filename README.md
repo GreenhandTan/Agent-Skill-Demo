@@ -1,8 +1,18 @@
-# Taobao-Search-Skill
+<div align="center">
 
-淘宝端到端 UI 自动化 Skill —— 从消息通道接收任务，自动完成淘宝登录、商品搜索、好评率筛选、加入购物车，并回传结构化结果。
+# 🛒 淘宝自动挑货 · Taobao-Search-Skill
 
-适用于 **Claude Code**、**OpenClaw**、**Cursor** 等 AI Agent 工具，也支持直接 CLI 调用。
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Playwright](https://img.shields.io/badge/playwright-1.45+-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-skill-6B57FF)](https://claude.ai/code)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-compatible-FF6B35)](https://github.com/openclaw)
+
+</div>
+
+> 让 AI Agent 替你逛淘宝 —— 输入关键词，自动完成登录、搜索、好评率筛选、加入购物车，并回传结构化结果。
+
+适用于 **Claude Code**、**OpenClaw**、**Cursor**、**Copilot** 等 AI Agent 工具，也支持直接 CLI 调用。
 
 ## 功能
 
