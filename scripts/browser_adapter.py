@@ -13,6 +13,15 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 from playwright_stealth import Stealth
 
 from models import MatchedItem
+from selectors import (
+    ACCESS_BLOCKED_SIGNALS, ADD_TO_CART_BUTTONS, CAPTCHA_BG_SELECTORS,
+    CAPTCHA_PANEL_SELECTORS, CAPTCHA_SLIDER_BTN_SELECTORS,
+    CART_ITEM_SELECTORS, LOGGED_IN_INDICATORS, LOGIN_COOKIE_NAMES,
+    LOGIN_PAGE_URL_SIGNALS, MIDDLEWARE_OVERLAY_HIDE_JS, NOT_LOGGED_IN_TEXT,
+    POPUP_CLOSE_BUTTONS, PRICE_SELECTORS, PRODUCT_CARD_CLIMB_SELECTORS,
+    PRODUCT_LINK_SELECTORS, RATING_SELECTORS, SALES_COUNT_SELECTORS,
+    SEARCH_INPUT, SEARCH_SUBMIT, SKU_CONTAINER_SELECTORS, SKU_OPTION_SELECTORS,
+)
 from session_manager import SessionSnapshot
 from slider_solver import SliderSolver
 
@@ -184,32 +193,20 @@ class BrowserAdapter:
 
     def _looks_logged_in(self, page: Page) -> bool:
         url = page.url.lower()
-        # If we're on a login page, definitely not logged in
-        if "login.taobao.com" in url or "login.tmall.com" in url:
+        if any(signal in url for signal in LOGIN_PAGE_URL_SIGNALS):
             return False
         with suppress(Exception):
-            if page.locator("text=亲，请登录").first.is_visible():
-                return False
-            if page.locator("text=请登录").first.is_visible(timeout=2000):
-                return False
-        # Logged-in indicators — check multiple signals
-        for selector in [
-            "text=退出", "text=我的淘宝", "text=已登录",
-            ".site-nav-user .site-nav-login-info-nick",  # user nickname
-            ".site-nav-user .site-nav-icon",              # user avatar
-            ".J_UserMember", ".tb-header-username",
-            "[class*='user-nick']", "[class*='userName']",
-            ".site-nav-login-info-nick",
-        ]:
+            for sel in NOT_LOGGED_IN_TEXT:
+                if page.locator(sel).first.is_visible():
+                    return False
+        for selector in LOGGED_IN_INDICATORS:
             with suppress(Exception):
                 if page.locator(selector).first.is_visible(timeout=2000):
                     return True
-        # Check cookies as last resort — Taobao sets specific logged-in cookies
         with suppress(Exception):
             cookies = page.context.cookies()
             for cookie in cookies:
-                if cookie.get("name") in {"_tb_token_", "cookie2", "unb"} and cookie.get("value"):
-                    # If we have auth cookies AND we're not on a login URL, treat as logged in
+                if cookie.get("name") in LOGIN_COOKIE_NAMES and cookie.get("value"):
                     if "login" not in url:
                         return True
         return False
@@ -221,23 +218,41 @@ class BrowserAdapter:
         print("[browser] ============================================")
 
         with suppress(Exception):
-            login_link = page.locator("text=亲，请登录").first
+            login_link = page.locator(NOT_LOGGED_IN_TEXT[0]).first
             if login_link.is_visible():
                 self._human_click(page, login_link)
                 page.wait_for_timeout(2000)
 
-        check_interval = 60
-        max_checks = 5
+        check_interval = 30
+        max_checks = 7  # up to ~3.5 min
+        total_slept = 0
+
+        # Immediate first check — user might already be logged in from a popup
+        if self._looks_logged_in(page):
+            print("[browser] 登录成功! (立即检测到)")
+            return
+
         for i in range(max_checks):
-            waited = (i + 1) * check_interval
-            print(f"[browser] 等待登录中... 第 {i+1}/{max_checks} 次检测 (已等待 {waited}s/{max_checks * check_interval}s)")
             time.sleep(check_interval)
-            # After the wait, navigate home to get a clean post-login page state
-            with suppress(Exception):
-                page.goto("https://www.taobao.com", wait_until="domcontentloaded", timeout=15000)
-                page.wait_for_timeout(2000)
+            total_slept += check_interval
+            print(f"[browser] 等待登录中... 第 {i+1}/{max_checks} 次检测 (已等待 {total_slept}s/{max_checks * check_interval}s)")
+
+            # Check current page without navigating — don't interrupt user's login flow
             if self._looks_logged_in(page):
-                print(f"[browser] 登录成功! (等待约 {waited}s)")
+                print(f"[browser] 登录成功! (等待约 {total_slept}s)")
+                return
+
+            # If we're still on a login domain, user hasn't finished — keep waiting
+            url = page.url.lower()
+            if "login.taobao.com" in url or "login.tmall.com" in url or "login" in url:
+                continue
+
+            # On a non-login page but not detected: gently refresh to sync state
+            with suppress(Exception):
+                page.reload(wait_until="domcontentloaded", timeout=15000)
+                page.wait_for_timeout(1500)
+            if self._looks_logged_in(page):
+                print(f"[browser] 登录成功! (等待约 {total_slept}s, 刷新后检测到)")
                 return
 
         print("[browser] 登录超时，请重试")
@@ -258,12 +273,7 @@ class BrowserAdapter:
         # Step 2: Dismiss any popups/overlays
         for _ in range(3):
             dismissed = False
-            for sel in [
-                "button:has-text('关闭')",
-                "button:has-text('我知道了')",
-                "text=关闭",
-                "text=我知道了",
-            ]:
+            for sel in POPUP_CLOSE_BUTTONS:
                 with suppress(Exception):
                     btn = self._find_first_visible_locator(page, [sel])
                     if btn is not None:
@@ -275,27 +285,13 @@ class BrowserAdapter:
 
         # Step 3: Hide overlay divs that intercept clicks
         with suppress(Exception):
-            page.evaluate("""() => {
-                document.querySelectorAll('.J_MIDDLEWARE_FRAME_WIDGET, [class*="middleware"], [class*="overlay"]').forEach(el => {
-                    el.style.display = 'none';
-                });
-            }""")
+            page.evaluate(MIDDLEWARE_OVERLAY_HIDE_JS)
 
         self._human_wait(0.5, 1.5)
         self._random_mouse_move(page)
 
         # Step 4: Locate search input and interact human-like
-        search_input = self._find_first_visible_locator(
-            page,
-            [
-                "#q",
-                "input[name='q']",
-                "input[placeholder*='搜索']",
-                "input[aria-label*='搜索']",
-                "input.search-combobox-input",
-                "input[class*='search']",
-            ],
-        )
+        search_input = self._find_first_visible_locator(page, SEARCH_INPUT)
         if search_input is None:
             raise RuntimeError("Unable to locate Taobao search input")
 
@@ -352,7 +348,7 @@ class BrowserAdapter:
         # If form submit didn't work, try clicking search button
         if "s.taobao.com/search" not in page.url:
             print("[browser] form submit did not navigate, trying search button")
-            for btn_sel in ["button[type='submit']", "#J_TSearchForm button", "button:has-text('搜索')", ".btn-search"]:
+            for btn_sel in SEARCH_SUBMIT:
                 with suppress(Exception):
                     btn = self._find_first_visible_locator(page, [btn_sel])
                     if btn is not None:
@@ -433,8 +429,8 @@ class BrowserAdapter:
 
         if not links:
             anchor_count = page.locator("a").count()
-            item_count = page.locator("a[href*='item.htm']").count()
-            tmall_count = page.locator("a[href*='detail.tmall.com']").count()
+            item_count = page.locator(PRODUCT_LINK_SELECTORS[0]).count()
+            tmall_count = page.locator(PRODUCT_LINK_SELECTORS[1]).count()
             print(f"[browser] candidate diagnostics => url={page.url}, anchors={anchor_count}, item_links={item_count}, tmall_links={tmall_count}")
             with suppress(Exception):
                 samples = page.evaluate(
@@ -530,21 +526,14 @@ class BrowserAdapter:
 
             # Extract price from detail page
             if not item.price or item.price_value is None:
-                price_text = page.evaluate("""() => {
-                    const selectors = [
-                        '#J_StrPr498', '.tm-price', '.tb-rmb-num',
-                        '[class*="price"]:not([class*="price-"])',
-                        '.tm-promo-price .tm-price', '.tb-item-price',
-                        '.sku-price .price-value', '.J_original_price',
-                    ];
-                    for (const sel of selectors) {
+                price_selectors_js = "[" + ", ".join(f"'{s}'" for s in PRICE_SELECTORS) + "]"
+                price_text = page.evaluate(f"""(selectors) => {{
+                    for (const sel of selectors) {{
                         const el = document.querySelector(sel);
-                        if (el && el.textContent.trim()) {
-                            return el.textContent.trim();
-                        }
-                    }
+                        if (el && el.textContent.trim()) return el.textContent.trim();
+                    }}
                     return null;
-                }""")
+                }}""", [PRICE_SELECTORS])
                 if price_text:
                     match = re.search(r'([\d,]+(?:\.\d{2})?)', price_text.replace(',', ''))
                     if match:
@@ -559,34 +548,25 @@ class BrowserAdapter:
 
             # Extract sales count from detail page if not found on search page
             if item.sales_count is None:
-                sales_text = page.evaluate("""() => {
-                    const selectors = [
-                        '[class*="sale"]', '[class*="Sell"]', '[class*="deal"]',
-                        '[class*="count"]:not([class*="comment"]):not([class*="rate"])',
-                        '.tm-ind-sellCount', '.tb-sell-counter',
-                    ];
+                sales_selectors_js = "[" + ", ".join(f"'{s}'" for s in SALES_COUNT_SELECTORS) + "]"
+                sales_text = page.evaluate(f"""(selectors) => {{
                     let text = '';
-                    for (const sel of selectors) {
+                    for (const sel of selectors) {{
                         const el = document.querySelector(sel);
                         if (el) text += ' ' + (el.textContent || '');
-                    }
+                    }}
                     return text || document.body.innerText;
-                }""")
+                }}""", [SALES_COUNT_SELECTORS])
                 item.sales_count = self._extract_sales_count(sales_text)
 
-            text = page.evaluate("""() => {
+            rating_selectors_js = "[" + ", ".join(f"'{s}'" for s in RATING_SELECTORS) + "]"
+            text = page.evaluate(f"""(selectors) => {{
                 const body = document.body.innerText;
-                const ratingEls = document.querySelectorAll(
-                    '[class*="rate"], [class*="Rating"], [class*="rating"], '
-                    + '[class*="score"], [class*="positive"], [class*="好评"], '
-                    + '.dsr-item, .tm-ind-item, .tb-seller-rate, #dsr-info, '
-                    + '[class*="seller"], [class*="star"], .tb-rate, .tm-rate, '
-                    + '.J_TitleRate, .tm-ind-title'
-                );
+                const ratingEls = document.querySelectorAll(selectors.join(','));
                 let extra = '';
-                ratingEls.forEach(el => { extra += ' ' + el.textContent; });
+                ratingEls.forEach(el => {{ extra += ' ' + el.textContent; }});
                 return body + extra;
-            }""")
+            }}""", [RATING_SELECTORS])
 
             rating = self._extract_rating(text)
             if rating is not None:
@@ -613,15 +593,10 @@ class BrowserAdapter:
 
             self._simulate_browsing(page, max_scroll=1000)
 
-        button = self._find_first_visible_locator(
-            page,
-            [
-                "button:has-text('加入购物车')",
-                "a:has-text('加入购物车')",
-                "text=加入购物车",
-                "button:has-text('购物车')",
-            ],
-        )
+        # Auto-select default SKU before adding to cart
+        self._select_default_sku(page)
+
+        button = self._find_first_visible_locator(page, ADD_TO_CART_BUTTONS)
         if button is None:
             print(f"[browser] add item to cart failed: {item.title}")
             return False
@@ -632,6 +607,32 @@ class BrowserAdapter:
         print(f"[browser] add item to cart: {item.title}")
         return True
 
+    def _select_default_sku(self, page: Page) -> None:
+        """Auto-select the first available option for each SKU dimension group."""
+        sku_container_js = ", ".join(SKU_CONTAINER_SELECTORS)
+        has_sku = page.evaluate(f"""() => {{
+            return document.querySelectorAll('{sku_container_js}').length > 0;
+        }}""")
+        if not has_sku:
+            return
+
+        selected = 0
+        for sel in SKU_OPTION_SELECTORS:
+            with suppress(Exception):
+                options = page.locator(sel).all()
+                for opt in options:
+                    with suppress(Exception):
+                        if opt.is_visible(timeout=1000):
+                            self._human_click(page, opt)
+                            self._human_wait(0.5, 1)
+                            selected += 1
+                            break
+            if selected > 0:
+                break  # one selector set is usually enough
+
+        if selected > 0:
+            print(f"[browser] auto-selected default SKU ({selected} dimension(s))")
+
     def confirm_cart_state(self) -> str:
         page = self._ensure_page()
         try:
@@ -641,11 +642,7 @@ class BrowserAdapter:
             self._handle_captcha_if_present(page)
             self._human_wait(1.5, 3)
 
-            cart_item_selectors = [
-                ".cart-list-item", ".item-wrapper", "[class*='cart-item']",
-                ".item-body", ".J_ItemBody", ".cart-item",
-            ]
-            for sel in cart_item_selectors:
+            for sel in CART_ITEM_SELECTORS:
                 with suppress(Exception):
                     locator = page.locator(sel).first
                     if locator.is_visible(timeout=3000):
@@ -815,28 +812,31 @@ class BrowserAdapter:
     # ──────────────────────────────────────────────
 
     def _wait_for_access_recovery(self, page: Page) -> None:
-        check_interval = 60
-        max_checks = 5
+        if not self._looks_access_blocked(page):
+            return
+        check_interval = 30
+        max_checks = 7
         for i in range(max_checks):
-            waited = (i + 1) * check_interval
-            print(f"[browser] 等待手动验证通过... 第 {i+1}/{max_checks} 次检测 (已等待 {waited}s)")
             time.sleep(check_interval)
+            total_slept = (i + 1) * check_interval
+            print(f"[browser] 等待手动验证通过... 第 {i+1}/{max_checks} 次检测 (已等待 {total_slept}s)")
             if not self._looks_access_blocked(page):
-                print(f"[browser] 验证通过! (等待约 {waited}s)")
+                print(f"[browser] 验证通过! (等待约 {total_slept}s)")
                 return
 
     def _looks_access_blocked(self, page: Page) -> bool:
-        signals = [
-            "text=访问被拒绝",
-            "text=验证",
-            "text=异常流量",
-            "text=请拖动滑块",
-            "text=请完成验证",
-        ]
-        for selector in signals:
+        # Priority 1: CSS class-based CAPTCHA detection (robust against text changes)
+        all_captcha_selectors = CAPTCHA_PANEL_SELECTORS + CAPTCHA_SLIDER_BTN_SELECTORS + CAPTCHA_BG_SELECTORS
+        for selector in all_captcha_selectors:
+            with suppress(Exception):
+                if page.locator(selector).first.is_visible(timeout=1000):
+                    return True
+        # Priority 2: Text-based signals (fallback)
+        for selector in ACCESS_BLOCKED_SIGNALS:
             with suppress(Exception):
                 if page.locator(selector).first.is_visible():
                     return True
+        # Priority 3: Page title check
         title = ""
         with suppress(Exception):
             title = page.title().lower()
@@ -865,53 +865,45 @@ class BrowserAdapter:
 
     def _find_candidate_links(self, page: Page) -> list[dict[str, str]]:
         with suppress(Exception):
-            results = page.evaluate("""() => {
+            link_selectors_js = "[" + ", ".join(f"'{s}'" for s in PRODUCT_LINK_SELECTORS) + "]"
+            card_climb_js = "[" + ", ".join(f"'{s}'" for s in PRODUCT_CARD_CLIMB_SELECTORS) + "]"
+            results = page.evaluate(f"""(selectors, cardSelectors) => {{
                 const results = [];
                 const seen = new Set();
-                const selectors = [
-                    'a[href*="item.htm"]', 'a[href*="detail.tmall.com"]',
-                    'a[href*="taobao.com/item.htm"]', 'a[href*="tmall.com/item.htm"]',
-                    'a[href*="item.taobao.com"]',
-                ];
-                for (const sel of selectors) {
+                for (const sel of selectors) {{
                     const anchors = document.querySelectorAll(sel);
-                    for (const a of anchors) {
+                    for (const a of anchors) {{
                         const href = (a.getAttribute('href') || '').trim();
                         if (!href || seen.has(href) || seen.size >= 50) continue;
                         seen.add(href);
                         const text = (a.innerText || '').trim();
                         const title = text.split('\\n')[0].trim();
                         if (!title) continue;
-                        let card = a.closest('[class*="item"]') || a.closest('[class*="Item"]')
-                                || a.closest('div[class*="card"]') || a.closest('[class*="Card"]')
-                                || a.closest('[class*="grid"]') || a.closest('[class*="Grid"]');
-                        if (!card) {
+                        let card = null;
+                        for (const cs of cardSelectors) {{
+                            card = a.closest(cs);
+                            if (card) break;
+                        }}
+                        if (!card) {{
                             let p = a.parentElement;
-                            for (let i = 0; i < 3 && p; i++) { p = p.parentElement; }
+                            for (let i = 0; i < 3 && p; i++) {{ p = p.parentElement; }}
                             card = p || a.parentElement;
-                        }
+                        }}
                         const cardText = card ? (card.innerText || '').trim() : text;
-                        results.push({ href, text, title, card_text: cardText });
+                        results.push({{ href, text, title, card_text: cardText }});
                         if (results.length >= 50) break;
-                    }
+                    }}
                     if (results.length > 0) break;
-                }
+                }}
                 return results;
-            }""")
+            }}""", [PRODUCT_LINK_SELECTORS, PRODUCT_CARD_CLIMB_SELECTORS])
             if isinstance(results, list) and results:
                 print(f"[browser] found {len(results)} candidate links via evaluate")
                 return results
 
         # Fallback to Playwright locators
         links: list[dict[str, str]] = []
-        selectors = [
-            "a[href*='item.htm']",
-            "a[href*='detail.tmall.com']",
-            "a[href*='taobao.com/item.htm']",
-            "a[href*='tmall.com/item.htm']",
-            "a[href*='item.taobao.com']",
-        ]
-        for selector in selectors:
+        for selector in PRODUCT_LINK_SELECTORS:
             with suppress(Exception):
                 for locator in page.locator(selector).all()[:40]:
                     with suppress(Exception):

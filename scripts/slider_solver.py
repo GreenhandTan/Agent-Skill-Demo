@@ -10,58 +10,15 @@ import ddddocr
 import numpy as np
 from playwright.sync_api import Page
 
+from selectors import (
+    CAPTCHA_BG_SELECTORS, CAPTCHA_PANEL_SELECTORS, CAPTCHA_REFRESH_SELECTORS,
+    CAPTCHA_SLICE_SELECTORS, CAPTCHA_SLIDER_BTN_SELECTORS, CAPTCHA_SUCCESS_SELECTORS,
+    CAPTCHA_TEXT_FALLBACKS,
+)
+
 
 class SliderSolver:
     """Automatic slider CAPTCHA solver using ddddocr (ML) + OpenCV (fallback)."""
-
-    # Common CAPTCHA element selectors (Taobao/GeeTest and variants)
-    CAPTCHA_SELECTORS = {
-        # GeeTest v3/v4 (Taobao's provider) — based on actual Taobao DOM
-        "gt_bg": [
-            "canvas.geetest_canvas_bg.geetest_absolute",
-            ".geetest_canvas_bg",
-            ".geetest_bg",
-            "canvas[class*='geetest_canvas_bg']",
-            ".geetest_panel_bg",
-            ".geetest_canvas_bg canvas",
-        ],
-        "gt_slice": [
-            "canvas.geetest_canvas_slice.geetest_absolute",
-            ".geetest_canvas_slice",
-            ".geetest_slice",
-            "canvas[class*='geetest_canvas_slice']",
-            ".geetest_slide_slice",
-        ],
-        "gt_slider_btn": [
-            ".geetest_btn",
-            ".geetest_slider_button",
-            "div.geetest_btn",
-            ".geetest_slider .geetest_slider_button",
-            "div[class*='geetest_btn']",
-            ".geetest_holder .geetest_slider_button",
-        ],
-        "gt_success": [
-            ".geetest_success",
-            ".geetest_result_tip",
-            ".geetest_panel_success",
-            ".geetest_result_tip.geetest_success",
-        ],
-        # Generic slider CAPTCHA selectors
-        "generic_bg": [
-            ".captcha-bg img",
-            ".slide-verify-image",
-            ".captcha_bg img",
-            "img[class*='captcha']",
-            "img[class*='bg']",
-        ],
-        "generic_slider": [
-            ".captcha-slider-btn",
-            ".slide-verify-slider-btn",
-            ".captcha_slider_button",
-            "div[class*='slider'] div[class*='btn']",
-            ".handler",
-        ],
-    }
 
     def __init__(self, method: str = "ddddocr") -> None:
         self.method = method
@@ -75,19 +32,20 @@ class SliderSolver:
 
     def is_captcha_present(self, page: Page) -> bool:
         """Check if a slider CAPTCHA is currently visible on the page."""
-        # Quick check: GeeTest panel container
-        with suppress(Exception):
-            if page.locator(".geetest_panel_box, .geetest_widget, .geetest_panel").first.is_visible(timeout=800):
-                return True
-
-        # Check slider button
-        for selector in self.CAPTCHA_SELECTORS["gt_slider_btn"] + self.CAPTCHA_SELECTORS["generic_slider"]:
+        # Priority 1: GeeTest panel containers (class-based)
+        for selector in CAPTCHA_PANEL_SELECTORS:
             with suppress(Exception):
                 if page.locator(selector).first.is_visible(timeout=800):
                     return True
 
-        # Check for CAPTCHA text
-        for text_sel in ["text=请完成验证", "text=向右拖动滑块", "text=拖动滑块", "text=请拖动滑块", "text=请先完成验证"]:
+        # Priority 2: Slider button elements (class-based)
+        for selector in CAPTCHA_SLIDER_BTN_SELECTORS:
+            with suppress(Exception):
+                if page.locator(selector).first.is_visible(timeout=800):
+                    return True
+
+        # Priority 3: Text fallback
+        for text_sel in CAPTCHA_TEXT_FALLBACKS:
             with suppress(Exception):
                 if page.locator(text_sel).first.is_visible(timeout=500):
                     return True
@@ -166,8 +124,7 @@ class SliderSolver:
         slice_el = None
         slider_btn = None
 
-        # Try GeeTest selectors first (Taobao uses GeeTest v3/v4)
-        for sel in self.CAPTCHA_SELECTORS["gt_bg"]:
+        for sel in CAPTCHA_BG_SELECTORS:
             with suppress(Exception):
                 loc = page.locator(sel).first
                 if loc.is_visible(timeout=1500):
@@ -175,7 +132,7 @@ class SliderSolver:
                     print(f"[slider] found bg: {sel}")
                     break
 
-        for sel in self.CAPTCHA_SELECTORS["gt_slice"]:
+        for sel in CAPTCHA_SLICE_SELECTORS:
             with suppress(Exception):
                 loc = page.locator(sel).first
                 if loc.is_visible(timeout=1500):
@@ -183,32 +140,13 @@ class SliderSolver:
                     print(f"[slider] found slice: {sel}")
                     break
 
-        for sel in self.CAPTCHA_SELECTORS["gt_slider_btn"]:
+        for sel in CAPTCHA_SLIDER_BTN_SELECTORS:
             with suppress(Exception):
                 loc = page.locator(sel).first
                 if loc.is_visible(timeout=1500):
                     slider_btn = loc
                     print(f"[slider] found slider btn: {sel}")
                     break
-
-        # Fallback to generic selectors
-        if slider_btn is None:
-            for sel in self.CAPTCHA_SELECTORS["generic_slider"]:
-                with suppress(Exception):
-                    loc = page.locator(sel).first
-                    if loc.is_visible(timeout=1000):
-                        slider_btn = loc
-                        print(f"[slider] found slider btn (generic): {sel}")
-                        break
-
-        if bg_el is None:
-            for sel in self.CAPTCHA_SELECTORS["generic_bg"]:
-                with suppress(Exception):
-                    loc = page.locator(sel).first
-                    if loc.is_visible(timeout=1000):
-                        bg_el = loc
-                        print(f"[slider] found bg (generic): {sel}")
-                        break
 
         # Last resort: try to find any canvas element (GeeTest uses canvas)
         if bg_el is None:
@@ -410,17 +348,14 @@ class SliderSolver:
 
     def _check_solved(self, page: Page) -> bool:
         """Check if the CAPTCHA was solved successfully."""
-        # Check for success indicators
-        for sel in self.CAPTCHA_SELECTORS["gt_success"]:
+        for sel in CAPTCHA_SUCCESS_SELECTORS:
             with suppress(Exception):
                 if page.locator(sel).first.is_visible(timeout=2000):
                     return True
 
-        # Check if CAPTCHA elements disappeared (solved = CAPTCHA closes)
         if not self.is_captcha_present(page):
             return True
 
-        # Check for success text
         for text in ["验证成功", "通过验证", "success"]:
             with suppress(Exception):
                 if page.locator(f"text={text}").first.is_visible(timeout=1000):
@@ -430,14 +365,7 @@ class SliderSolver:
 
     def _refresh_captcha(self, page: Page) -> None:
         """Click the refresh button to get a new CAPTCHA."""
-        refresh_selectors = [
-            ".geetest_refresh",
-            ".geetest_reset_tip_content",
-            "button:has-text('刷新')",
-            ".captcha-refresh",
-            "[class*='refresh']",
-        ]
-        for sel in refresh_selectors:
+        for sel in CAPTCHA_REFRESH_SELECTORS:
             with suppress(Exception):
                 btn = page.locator(sel).first
                 if btn.is_visible(timeout=1000):
