@@ -184,15 +184,34 @@ class BrowserAdapter:
 
     def _looks_logged_in(self, page: Page) -> bool:
         url = page.url.lower()
-        if "login" in url:
+        # If we're on a login page, definitely not logged in
+        if "login.taobao.com" in url or "login.tmall.com" in url:
             return False
         with suppress(Exception):
             if page.locator("text=亲，请登录").first.is_visible():
                 return False
-        for selector in ["text=退出", "text=我的淘宝", "text=已登录"]:
+            if page.locator("text=请登录").first.is_visible(timeout=2000):
+                return False
+        # Logged-in indicators — check multiple signals
+        for selector in [
+            "text=退出", "text=我的淘宝", "text=已登录",
+            ".site-nav-user .site-nav-login-info-nick",  # user nickname
+            ".site-nav-user .site-nav-icon",              # user avatar
+            ".J_UserMember", ".tb-header-username",
+            "[class*='user-nick']", "[class*='userName']",
+            ".site-nav-login-info-nick",
+        ]:
             with suppress(Exception):
-                if page.locator(selector).first.is_visible():
+                if page.locator(selector).first.is_visible(timeout=2000):
                     return True
+        # Check cookies as last resort — Taobao sets specific logged-in cookies
+        with suppress(Exception):
+            cookies = page.context.cookies()
+            for cookie in cookies:
+                if cookie.get("name") in {"_tb_token_", "cookie2", "unb"} and cookie.get("value"):
+                    # If we have auth cookies AND we're not on a login URL, treat as logged in
+                    if "login" not in url:
+                        return True
         return False
 
     def _wait_for_user_login(self, page: Page) -> None:
@@ -207,14 +226,16 @@ class BrowserAdapter:
                 self._human_click(page, login_link)
                 page.wait_for_timeout(2000)
 
-        # Poll every 120s without reloading, so the user's login flow is not interrupted.
-        # Total wait: up to ~10 minutes (5 checks).
         check_interval = 60
         max_checks = 5
         for i in range(max_checks):
             waited = (i + 1) * check_interval
             print(f"[browser] 等待登录中... 第 {i+1}/{max_checks} 次检测 (已等待 {waited}s/{max_checks * check_interval}s)")
             time.sleep(check_interval)
+            # After the wait, navigate home to get a clean post-login page state
+            with suppress(Exception):
+                page.goto("https://www.taobao.com", wait_until="domcontentloaded", timeout=15000)
+                page.wait_for_timeout(2000)
             if self._looks_logged_in(page):
                 print(f"[browser] 登录成功! (等待约 {waited}s)")
                 return
