@@ -4,7 +4,7 @@ from typing import Any
 
 from browser_adapter import BrowserAdapter
 from config import OpenClawSkillConfig
-from feishu_client import ReportChannel
+from report_channel import ReportChannel
 from models import TaskContext, WorkflowResult
 from session_flow import SessionFlow
 from session_manager import SessionManager

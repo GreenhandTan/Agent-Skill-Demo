@@ -7,7 +7,7 @@ from pathlib import Path
 
 from browser_adapter import BrowserAdapter
 from config import OpenClawSkillConfig
-from feishu_client import get_channel
+from report_channel import get_channel
 from workflow import UiAutomationWorkflow
 
 
