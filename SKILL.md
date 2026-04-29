@@ -47,7 +47,7 @@ python scripts/run_workflow.py \
 ```python
 from scripts.workflow import UiAutomationWorkflow
 from scripts.browser_adapter import BrowserAdapter
-from scripts.feishu_client import FeishuClient
+from scripts.report_channel import FeishuClient
 
 payload = {
     "search_keyword": "...",
@@ -163,8 +163,7 @@ result.error.code      → 错误码（失败时）
 
 ### 消息通道适配
 
-- `scripts/feishu_client.py` 是一个独立的协议适配层，负责 payload 归一化和报告封装，不直接调用任何消息平台 SDK。
-- 接入新通道（Slack、钉钉、企业微信等）只需实现同样的 payload 归一化接口，无需改动核心工作流。
+- `scripts/report_channel.py` 是消息通道抽象层：`ReportChannel` 基类定义 `send_report()` / `normalize_task_payload()` 接口，`FeishuClient` 是飞书实现。接入新通道（Slack、钉钉、企业微信等）只需新增子类并注册到 `CHANNEL_REGISTRY`。
 
 ### 失败码
 

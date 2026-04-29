@@ -57,7 +57,7 @@ python scripts/run_workflow.py --search-keyword "鼠标" --headless --no-manual-
 ```python
 from scripts.workflow import UiAutomationWorkflow
 from scripts.browser_adapter import BrowserAdapter
-from scripts.feishu_client import FeishuClient
+from scripts.report_channel import FeishuClient
 
 payload = {
     "task_id": "task-001",
@@ -92,10 +92,10 @@ scripts/
 ├── workflow.py                   # 主流程编排（7 步状态机）
 ├── browser_adapter.py            # 浏览器适配器（Playwright + stealth + 拟人化）
 ├── slider_solver.py              # 滑动验证码求解器（ddddocr + OpenCV）
-├── selectors.py                   # 集中化DOM选择器管理
+├── taobao_selectors.py            # 集中化DOM选择器管理
 ├── session_manager.py            # 会话持久化管理
 ├── session_flow.py               # 会话恢复与捕获编排
-├── feishu_client.py              # 消息通道协议适配层
+├── report_channel.py             # 消息通道抽象层（ReportChannel基类 + FeishuClient）
 ├── config.py                     # 配置解析
 └── models.py                     # 数据模型
 .cache/taobao-search-skill/       # 会话缓存与截图（自动创建，已 gitignore）
