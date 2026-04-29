@@ -207,18 +207,17 @@ class BrowserAdapter:
                 self._human_click(page, login_link)
                 page.wait_for_timeout(2000)
 
-        for i in range(100):
-            time.sleep(3)
-            try:
-                page.reload(wait_until="domcontentloaded", timeout=10000)
-                page.wait_for_timeout(2000)
-            except Exception:
-                pass
+        # Poll every 120s without reloading, so the user's login flow is not interrupted.
+        # Total wait: up to ~10 minutes (5 checks).
+        check_interval = 120
+        max_checks = 5
+        for i in range(max_checks):
+            waited = (i + 1) * check_interval
+            print(f"[browser] 等待登录中... 第 {i+1}/{max_checks} 次检测 (已等待 {waited}s/{max_checks * check_interval}s)")
+            time.sleep(check_interval)
             if self._looks_logged_in(page):
-                print(f"[browser] 登录成功! (等待约 {(i+1)*3}s)")
+                print(f"[browser] 登录成功! (等待约 {waited}s)")
                 return
-            if (i + 1) % 10 == 0:
-                print(f"[browser] 等待登录中... ({(i+1)*3}s/300s)")
 
         print("[browser] 登录超时，请重试")
 
@@ -795,11 +794,15 @@ class BrowserAdapter:
     # ──────────────────────────────────────────────
 
     def _wait_for_access_recovery(self, page: Page) -> None:
-        for _ in range(90):
+        check_interval = 120
+        max_checks = 5
+        for i in range(max_checks):
+            waited = (i + 1) * check_interval
+            print(f"[browser] 等待手动验证通过... 第 {i+1}/{max_checks} 次检测 (已等待 {waited}s)")
+            time.sleep(check_interval)
             if not self._looks_access_blocked(page):
+                print(f"[browser] 验证通过! (等待约 {waited}s)")
                 return
-            with suppress(Exception):
-                page.wait_for_timeout(2000)
 
     def _looks_access_blocked(self, page: Page) -> bool:
         signals = [
