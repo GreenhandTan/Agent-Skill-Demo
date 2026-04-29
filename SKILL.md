@@ -1,6 +1,6 @@
 ---
 name: Taobao-Search-Skill
-description: "淘宝浏览器自动化，包括登录、商品搜索、按好评率筛选、加入购物车以及结果回传。支持任意消息通道（飞书/Slack/CLI）触发。keywords: Taobao, search, cart, rating, browser-automation, ecommerce"
+description: "淘宝浏览器自动化，包括会话持久化、登录、商品搜索、多维度筛选（好评率/价格/销量/包邮/天猫）、SKU规格匹配、加入购物车、验证码自动求解以及结果回传。支持任意消息通道（飞书/Slack/CLI）触发。keywords: Taobao, search, cart, rating, price, sales, shipping, tmall, SKU, captcha, session, browser-automation, ecommerce"
 ---
 
 # Taobao-Search-Skill
