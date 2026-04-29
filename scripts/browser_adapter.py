@@ -13,7 +13,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 from playwright_stealth import Stealth
 
 from models import MatchedItem
-from selectors import (
+from taobao_selectors import (
     ACCESS_BLOCKED_SIGNALS, ADD_TO_CART_BUTTONS, CAPTCHA_BG_SELECTORS,
     CAPTCHA_PANEL_SELECTORS, CAPTCHA_SLIDER_BTN_SELECTORS,
     CART_ITEM_SELECTORS, LOGGED_IN_INDICATORS, LOGIN_COOKIE_NAMES,
@@ -501,21 +501,41 @@ class BrowserAdapter:
         print(f"[browser] collect up to {max_candidates} candidates with threshold {rating_threshold}, found={len(candidates)}{filter_info}")
         return candidates
 
+    def _extract_detail_price(self, page: Page) -> float | None:
+        price_text = page.evaluate("""() => {
+            const selectors = """ + str(PRICE_SELECTORS) + r""";
+            for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el && el.textContent.trim()) return el.textContent.trim();
+            }
+            return null;
+        }""")
+        if not price_text:
+            return None
+        match = re.search(r'([\d,]+(?:\.\d{2})?)', price_text.replace(',', ''))
+        if not match:
+            return None
+        try:
+            val = float(match.group(1))
+            return val if val >= 0.01 else None
+        except ValueError:
+            return None
+
     def enrich_item_rating(self, item: MatchedItem) -> float | None:
         page = self._ensure_page()
         if not item.url:
             return None
         try:
-            self._human_wait(2, 4)
+            self._human_wait(0.5, 1.5)
             self._random_mouse_move(page)
-            self._human_wait(0.3, 0.8)
+            self._human_wait(0.2, 0.5)
 
             page.goto(item.url, wait_until="domcontentloaded", timeout=20000)
             with suppress(Exception):
                 page.wait_for_load_state("networkidle", timeout=8000)
             self._handle_captcha_if_present(page)
 
-            self._simulate_browsing(page, max_scroll=1500)
+            self._simulate_browsing(page, max_scroll=600)
 
             # Extract item_id from URL query param
             if not item.item_id:
@@ -527,25 +547,10 @@ class BrowserAdapter:
 
             # Extract price from detail page
             if not item.price or item.price_value is None:
-                price_selectors_js = "[" + ", ".join(f"'{s}'" for s in PRICE_SELECTORS) + "]"
-                price_text = page.evaluate(f"""(selectors) => {{
-                    for (const sel of selectors) {{
-                        const el = document.querySelector(sel);
-                        if (el && el.textContent.trim()) return el.textContent.trim();
-                    }}
-                    return null;
-                }}""", [PRICE_SELECTORS])
-                if price_text:
-                    match = re.search(r'([\d,]+(?:\.\d{2})?)', price_text.replace(',', ''))
-                    if match:
-                        raw = match.group(1)
-                        try:
-                            f = float(raw)
-                            if f >= 0.01:
-                                item.price = f"¥{f:.2f}"
-                                item.price_value = f
-                        except ValueError:
-                            pass
+                detail_price = self._extract_detail_price(page)
+                if detail_price is not None:
+                    item.price = f"¥{detail_price:.2f}"
+                    item.price_value = detail_price
 
             # Extract sales count from detail page if not found on search page
             if item.sales_count is None:
@@ -580,8 +585,9 @@ class BrowserAdapter:
             print(f"[browser] enrich rating failed for [{item.title[:30]}]: {e}")
             return None
 
-    def add_to_cart(self, item: MatchedItem, sku_keywords: str | None = None) -> bool | None:
-        """Add item to cart. Returns True on success, False on SKU mismatch, None on error."""
+    def add_to_cart(self, item: MatchedItem, sku_keywords: str | None = None,
+                    price_min: float | None = None, price_max: float | None = None) -> bool | None:
+        """Add item to cart. Returns True on success, False on SKU/price mismatch, None on error."""
         page = self._ensure_page()
         if item.url:
             self._human_wait(2, 5)
@@ -599,6 +605,19 @@ class BrowserAdapter:
         if sku_ok is False:
             print(f"[browser] SKU mismatch for [{item.title[:30]}]: no option matching '{sku_keywords}'")
             return False
+
+        # Verify actual SKU price against constraints
+        if price_min is not None or price_max is not None:
+            detail_price = self._extract_detail_price(page)
+            if detail_price is not None:
+                item.price = f"¥{detail_price:.2f}"
+                item.price_value = detail_price
+                if price_min is not None and detail_price < price_min:
+                    print(f"[browser] SKU price {detail_price:.2f} < min {price_min:.2f} for [{item.title[:30]}]")
+                    return False
+                if price_max is not None and detail_price > price_max:
+                    print(f"[browser] SKU price {detail_price:.2f} > max {price_max:.2f} for [{item.title[:30]}]")
+                    return False
 
         button = self._find_first_visible_locator(page, ADD_TO_CART_BUTTONS)
         if button is None:
@@ -1089,11 +1108,9 @@ class BrowserAdapter:
             if match:
                 try:
                     val = float(match.group(1))
-                    if val > 10:
-                        return val / 100.0
-                    elif 0 < val <= 1.0:
+                    if 0 < val <= 1.0:
                         return val
-                    elif val > 5:
+                    elif val > 1.0:
                         return val / 100.0
                 except ValueError:
                     continue

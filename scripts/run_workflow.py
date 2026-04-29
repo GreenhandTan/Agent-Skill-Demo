@@ -7,7 +7,7 @@ from pathlib import Path
 
 from browser_adapter import BrowserAdapter
 from config import OpenClawSkillConfig
-from feishu_client import FeishuClient
+from feishu_client import get_channel
 from workflow import UiAutomationWorkflow
 
 
@@ -37,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--require-free-shipping", action="store_true", help="Only include items with free shipping")
     parser.add_argument("--require-tmall", type=str, choices=["yes", "no"], help="Filter by tmall/taobao store type")
     parser.add_argument("--sku-keywords", type=str, help="Space-separated SKU spec keywords, e.g. '16G 512G'")
+    parser.add_argument("--report-channel", default="feishu", choices=["feishu"], help="Report channel for delivering results")
     return parser
 
 
@@ -56,7 +57,7 @@ def main() -> int:
             "max_candidates": args.max_candidates,
             "need_screenshot": not args.no_screenshot,
             "manual_approval_required": not args.no_manual_approval,
-            "report_channel": "feishu",
+            "report_channel": args.report_channel,
             "session_state_path": args.session_state_path,
             "session_strategy": args.session_strategy,
             "session_auto_save": not args.no_session_auto_save,
@@ -73,9 +74,9 @@ def main() -> int:
         }
 
     config = OpenClawSkillConfig.from_payload(payload)
-    feishu_client = FeishuClient()
+    report_channel = get_channel(args.report_channel)
     browser = BrowserAdapter(browser_name=config.browser_name, headless=bool(payload.get("constraints", {}).get("headless", False)))
-    workflow = UiAutomationWorkflow(feishu_client, browser)
+    workflow = UiAutomationWorkflow(report_channel, browser)
 
     result = workflow.run(payload)
     report_envelope = workflow.report(payload, result)

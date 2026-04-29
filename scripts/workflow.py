@@ -4,15 +4,15 @@ from typing import Any
 
 from browser_adapter import BrowserAdapter
 from config import OpenClawSkillConfig
-from feishu_client import FeishuClient
+from feishu_client import ReportChannel
 from models import TaskContext, WorkflowResult
 from session_flow import SessionFlow
 from session_manager import SessionManager
 
 
 class UiAutomationWorkflow:
-    def __init__(self, feishu_client: FeishuClient, browser: BrowserAdapter) -> None:
-        self.feishu_client = feishu_client
+    def __init__(self, report_channel: ReportChannel, browser: BrowserAdapter) -> None:
+        self.report_channel = report_channel
         self.browser = browser
 
     def build_context(self, payload: dict[str, Any]) -> TaskContext:
@@ -134,9 +134,10 @@ class UiAutomationWorkflow:
             apply_rating_filter = context.rating_threshold > 0
 
             for item in candidates:
-                if apply_rating_filter:
-                    self.browser.enrich_item_rating(item)
+                # Always try to enrich rating for display; only filter when threshold is set
+                self.browser.enrich_item_rating(item)
 
+                if apply_rating_filter:
                     if item.rating is None:
                         result.add_step("candidate_skipped", "skipped",
                                         message=f"{item.title} (好评率未知)", rating=-1)
@@ -146,13 +147,16 @@ class UiAutomationWorkflow:
                                         message=item.title, rating=item.rating)
                         continue
 
-                cart_ok = self.browser.add_to_cart(item, sku_keywords=context.sku_keywords)
+                cart_ok = self.browser.add_to_cart(
+                    item, sku_keywords=context.sku_keywords,
+                    price_min=context.price_min, price_max=context.price_max,
+                )
                 if cart_ok is True:
                     result.matched_items.append(item)
                     result.add_step("item_added", "success", message=item.title, item_id=item.item_id or "")
                 elif cart_ok is False:
                     result.add_step("candidate_skipped", "skipped",
-                                    message=f"{item.title} (SKU不匹配: {context.sku_keywords})")
+                                    message=f"{item.title} (SKU/价格不匹配: {context.sku_keywords})")
 
             result.cart_status = self.browser.confirm_cart_state()
             result.add_step("cart_confirmed", result.cart_status, item_count=len(result.matched_items))
@@ -175,4 +179,4 @@ class UiAutomationWorkflow:
 
     def report(self, payload: dict[str, Any], result: WorkflowResult) -> dict[str, Any]:
         report_to = payload.get("report_to")
-        return self.feishu_client.send_report(report_to, result.to_dict())
+        return self.report_channel.send_report(report_to, result.to_dict())

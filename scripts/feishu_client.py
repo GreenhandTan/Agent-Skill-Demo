@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,7 +21,23 @@ class FeishuReportEnvelope:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-class FeishuClient:
+class ReportChannel(ABC):
+    """Protocol for report channels (Feishu, Slack, CLI, etc.).
+
+    Adding a new channel only requires subclassing this and implementing
+    send_report() and normalize_task_payload().
+    """
+
+    @abstractmethod
+    def send_report(self, report_to: dict[str, Any] | None, result: dict[str, Any]) -> dict[str, Any]:
+        ...
+
+    @abstractmethod
+    def normalize_task_payload(self, payload: dict[str, Any] | None) -> dict[str, Any]:
+        ...
+
+
+class FeishuClient(ReportChannel):
     """OpenClaw-facing Feishu protocol adapter.
 
     The OpenClaw transport/plugin layer is responsible for receiving Feishu
@@ -100,3 +117,16 @@ class FeishuClient:
             return None
         text = str(value).strip()
         return text or None
+
+
+# Channel registry — add new channel implementations here
+CHANNEL_REGISTRY: dict[str, type[ReportChannel]] = {
+    "feishu": FeishuClient,
+}
+
+
+def get_channel(name: str) -> ReportChannel:
+    cls = CHANNEL_REGISTRY.get(name)
+    if cls is None:
+        raise ValueError(f"Unknown report channel: {name!r}. Available: {list(CHANNEL_REGISTRY)}")
+    return cls()

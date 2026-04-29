@@ -10,7 +10,7 @@ import ddddocr
 import numpy as np
 from playwright.sync_api import Page
 
-from selectors import (
+from taobao_selectors import (
     CAPTCHA_BG_SELECTORS, CAPTCHA_PANEL_SELECTORS, CAPTCHA_REFRESH_SELECTORS,
     CAPTCHA_SLICE_SELECTORS, CAPTCHA_SLIDER_BTN_SELECTORS, CAPTCHA_SUCCESS_SELECTORS,
     CAPTCHA_TEXT_FALLBACKS,
