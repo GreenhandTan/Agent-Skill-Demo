@@ -10,13 +10,14 @@
 
 </div>
 
-> 让 AI Agent 替你逛淘宝 —— 输入关键词，自动完成登录、搜索、好评率筛选、加入购物车，并回传结构化结果。
+> 让 AI Agent 替你逛淘宝 —— 输入关键词，自动完成登录、搜索、按需筛选（价格/销量/好评率/包邮/天猫），加入购物车，并回传结构化结果。
 
 适用于 **Claude Code**、**OpenClaw**、**Cursor**、**Copilot** 等 AI Agent 工具，也支持直接 CLI 调用。
 
 ## 功能
 
-- **会话持久化** — 首次人工登录后自动保存 `storage_state`，后续运行跳过登录
+- **会话持久化** — 首次人工登录后自动保存 `storage_state`，后续运行跳过登录；登录检测每分钟轮询一次，不打断用户操作
+- **多维度筛选** — 价格区间、付款人数、包邮、天猫/淘宝店，全部在搜索结果页完成，不进详情页；好评率仅在用户明确要求时考察
 - **反检测拟人化** — playwright-stealth 注入 20 种反检测补丁，结合贝塞尔曲线鼠标轨迹、随机打字延迟、分段滚动，降低风控触发概率
 - **验证码自动求解** — ddddocr ML 模型 + OpenCV Canny 边缘检测双引擎，支持淘宝 GeeTest v3/v4 滑块验证码
 - **容错降级** — 登录/风控/验证码失败时暂停并请求人工接管，不绕过平台安全控制
@@ -34,10 +35,16 @@
 ### CLI
 
 ```bash
-python scripts/run_workflow.py --search-keyword "苹果手机" --rating-threshold 0.95 \
-    --price-min 100 --price-max 5000 --min-sales 100 --require-free-shipping --require-tmall yes
+# 基础用法：不提好评率则不考察，避免遗漏
+python scripts/run_workflow.py --search-keyword "苹果手机" --price-max 10000
+
+# 全量筛选：好评率 + 价格 + 销量 + 包邮 + 天猫
+python scripts/run_workflow.py --search-keyword "耳机" --rating-threshold 0.95 \
+    --price-min 50 --price-max 500 --min-sales 1000 --require-free-shipping --require-tmall yes
+
+# 从文件读取配置 / 无人值守
 python scripts/run_workflow.py --task-file task.json
-python scripts/run_workflow.py --search-keyword "耳机" --headless --no-manual-approval
+python scripts/run_workflow.py --search-keyword "鼠标" --headless --no-manual-approval
 ```
 
 ### Python API
@@ -50,10 +57,11 @@ from scripts.feishu_client import FeishuClient
 payload = {
     "task_id": "task-001",
     "search_keyword": "苹果手机",
-    "rating_threshold": 0.95,
     "max_candidates": 5,
-    "need_screenshot": True,
-    "manual_approval_required": True,
+    "price_max": 10000,
+    "min_sales": 100,
+    "require_free_shipping": True,
+    # rating_threshold 省略则不考察好评率
 }
 
 client = FeishuClient()
@@ -64,7 +72,10 @@ result = workflow.run(payload)
 print(f"状态: {result.status}")
 print(f"匹配商品: {len(result.matched_items)} 件")
 for item in result.matched_items:
-    print(f"  - {item.title} | {item.price} | 好评率 {item.rating}")
+    tmall_tag = "[天猫]" if item.is_tmall else "[淘宝]"
+    shipping_tag = "包邮" if item.free_shipping else ""
+    sales_info = f"月销{item.sales_count}" if item.sales_count else ""
+    print(f"  {tmall_tag} {item.title} | {item.price} | {sales_info} | {shipping_tag}")
 ```
 
 ## 架构
@@ -88,7 +99,7 @@ scripts/
 
 ```
 接收任务 → 恢复会话 → 打开淘宝 → 确认登录态 → 搜索商品
-    → 进入详情页提取好评率 → 筛选商品 → 加入购物车 → 验证加购 → 回传结果
+    → 多维筛选(价格/销量/包邮/天猫) → [可选:详情页提取好评率] → 加入购物车 → 验证加购 → 回传结果
 ```
 
 ## 配置参数
