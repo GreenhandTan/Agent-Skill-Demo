@@ -130,18 +130,20 @@ class UiAutomationWorkflow:
             result.filter_status = "success"
             result.add_step("candidates_collected", "success", candidate_count=len(candidates))
 
-            for item in candidates:
-                # Visit product detail page to extract rating (search results don't show it)
-                self.browser.enrich_item_rating(item)
+            apply_rating_filter = context.rating_threshold > 0
 
-                if item.rating is not None and item.rating <= context.rating_threshold:
-                    result.add_step("candidate_skipped", "skipped",
-                                    message=item.title, rating=item.rating)
-                    continue
-                if item.rating is None:
-                    result.add_step("candidate_skipped", "skipped",
-                                    message=f"{item.title} (好评率未知)", rating=-1)
-                    continue
+            for item in candidates:
+                if apply_rating_filter:
+                    self.browser.enrich_item_rating(item)
+
+                    if item.rating is None:
+                        result.add_step("candidate_skipped", "skipped",
+                                        message=f"{item.title} (好评率未知)", rating=-1)
+                        continue
+                    if item.rating <= context.rating_threshold:
+                        result.add_step("candidate_skipped", "skipped",
+                                        message=item.title, rating=item.rating)
+                        continue
 
                 if self.browser.add_to_cart(item):
                     result.matched_items.append(item)
