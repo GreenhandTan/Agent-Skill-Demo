@@ -143,7 +143,12 @@ RATING_SELECTORS = [
     ".tm-ind-title",
 ]
 
+# Taobao uses CSS Modules with dynamic hash suffixes (e.g. skuWrapper--iKSsnB_s).
+# Use prefix matching via [class*="..."] to stay resilient against hash changes.
 SKU_CONTAINER_SELECTORS = [
+    '[class*="GeneralSkuPanel"]',
+    '[class*="skuWrapper"]',
+    '[class*="PurchasePanel"]',
     ".J_TSaleProp",
     ".tb-prop",
     ".tb-sku",
@@ -151,16 +156,32 @@ SKU_CONTAINER_SELECTORS = [
     ".tm-sale-prop",
     'dl[class*="prop"]',
     ".J_Prop",
-    '[class*="sku"]:not([class*="sku-price"]):not([class*="sku-title"])',
 ]
 
 SKU_OPTION_SELECTORS = [
+    '[class*="skuItem"]:not([class*="disabled"]):not([class*="disable"])',
     ".J_TSaleProp li:not([class*='disabled']):not([class*='out-of'])",
     ".tb-prop li:not([class*='disabled']):not([class*='out-of'])",
     ".tb-sku li:not([class*='disabled'])",
     "dl[class*='prop'] dd a:not([class*='disabled'])",
     "[data-property] li:not([class*='disabled'])",
 ]
+
+# JS-side selectors for _select_default_sku's page.evaluate()
+SKU_GROUP_JS_SELECTORS = [
+    '[class*="skuWrapper"]',
+    '[class*="GeneralSkuPanel"]',
+    ".J_TSaleProp", ".tb-prop", ".tb-sku", "[data-property]",
+    ".tm-sale-prop", 'dl[class*="prop"]', ".J_Prop",
+]
+
+SKU_ITEM_JS_SELECTORS = [
+    '[class*="valueItem"]',
+    '[class*="skuItem"]',
+    "li", "dd a", 'span[data-value]', 'div[class*="item-sku"]',
+]
+
+SKU_VALUE_SELECTOR = '[class*="valueItem"]:not([class*="label"]):not([class*="Label"])'
 
 # ──────────────────────────────────────────────
 # Cart

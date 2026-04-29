@@ -23,6 +23,7 @@ description: "淘宝浏览器自动化，包括登录、商品搜索、按好评
 | `min_sales` | "付款人数超过 N""销量大于 N""至少 N 人付款" → 数值 | `None` |
 | `require_free_shipping` | 提到"包邮""免邮""免运费"则为 `true` | `false` |
 | `require_tmall` | 提到"只要天猫""天猫店"→ `true`；"只要淘宝""C店"→ `false` | `None` |
+| `sku_keywords` | 用户指定规格如"16+512""16G 512G"→ 空格分隔关键词匹配SKU选项 | `None` |
 | `need_screenshot` | 提到"截图""证据"则为 `true` | `true` |
 | `manual_approval_required` | 提到"自动""无人值守"则为 `false` | `true` |
 
@@ -123,6 +124,7 @@ result.evidence      → 截图路径列表
 - `min_sales`：最低付款人数过滤，未设置则不限制。
 - `require_free_shipping`：是否只要包邮商品，默认 `false`。
 - `require_tmall`：`true` 只要天猫、`false` 只要淘宝店、`None` 不限，默认 `None`。
+- `sku_keywords`：规格关键词，空格分隔（如 `"16G 512G"`），用于匹配商品详情页的 SKU 选项。
 
 ### 期望输出
 

@@ -114,6 +114,7 @@ scripts/
 | `min_sales` | int | `None` | 最低付款人数过滤 |
 | `require_free_shipping` | bool | `false` | 只要包邮商品 |
 | `require_tmall` | bool/None | `None` | `true`=只要天猫, `false`=只要淘宝店, `None`=不限 |
+| `sku_keywords` | str | `None` | SKU规格关键词（空格分隔），如 `"16G 512G"` |
 | `need_screenshot` | bool | `true` | 是否捕获证据截图 |
 | `manual_approval_required` | bool | `true` | 登录/验证时是否等待人工接管 |
 | `session_strategy` | str | `"storage_state"` | 会话恢复策略 |

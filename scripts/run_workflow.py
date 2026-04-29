@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-sales", type=int, help="Minimum sales count filter")
     parser.add_argument("--require-free-shipping", action="store_true", help="Only include items with free shipping")
     parser.add_argument("--require-tmall", type=str, choices=["yes", "no"], help="Filter by tmall/taobao store type")
+    parser.add_argument("--sku-keywords", type=str, help="Space-separated SKU spec keywords, e.g. '16G 512G'")
     return parser
 
 
@@ -64,6 +65,7 @@ def main() -> int:
             "min_sales": args.min_sales,
             "require_free_shipping": args.require_free_shipping,
             "require_tmall": {"yes": True, "no": False}.get(args.require_tmall),
+            "sku_keywords": args.sku_keywords,
             "constraints": {
                 "browser": "chromium",
                 "headless": args.headless,

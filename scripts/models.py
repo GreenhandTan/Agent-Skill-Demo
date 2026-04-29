@@ -22,6 +22,7 @@ class TaskContext:
     min_sales: int | None = None
     require_free_shipping: bool = False
     require_tmall: bool | None = None
+    sku_keywords: str | None = None
     raw_payload: dict[str, Any] = field(default_factory=dict)
 
 

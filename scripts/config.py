@@ -5,6 +5,13 @@ from pathlib import Path
 from typing import Any
 
 
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
@@ -59,6 +66,7 @@ class OpenClawSkillConfig:
     min_sales: int | None = None
     require_free_shipping: bool = False
     require_tmall: bool | None = None
+    sku_keywords: str | None = None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "OpenClawSkillConfig":
@@ -81,4 +89,5 @@ class OpenClawSkillConfig:
             min_sales=_optional_int(payload.get("min_sales")),
             require_free_shipping=bool(payload.get("require_free_shipping", False)),
             require_tmall=_optional_bool(payload.get("require_tmall")),
+            sku_keywords=_optional_str(payload.get("sku_keywords")),
         )

@@ -34,6 +34,7 @@ class UiAutomationWorkflow:
             min_sales=config.min_sales,
             require_free_shipping=config.require_free_shipping,
             require_tmall=config.require_tmall,
+            sku_keywords=config.sku_keywords,
             raw_payload=payload,
         )
 
@@ -145,9 +146,13 @@ class UiAutomationWorkflow:
                                         message=item.title, rating=item.rating)
                         continue
 
-                if self.browser.add_to_cart(item):
+                cart_ok = self.browser.add_to_cart(item, sku_keywords=context.sku_keywords)
+                if cart_ok is True:
                     result.matched_items.append(item)
                     result.add_step("item_added", "success", message=item.title, item_id=item.item_id or "")
+                elif cart_ok is False:
+                    result.add_step("candidate_skipped", "skipped",
+                                    message=f"{item.title} (SKU不匹配: {context.sku_keywords})")
 
             result.cart_status = self.browser.confirm_cart_state()
             result.add_step("cart_confirmed", result.cart_status, item_count=len(result.matched_items))

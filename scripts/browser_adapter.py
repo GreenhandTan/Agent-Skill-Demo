@@ -20,7 +20,8 @@ from selectors import (
     LOGIN_PAGE_URL_SIGNALS, MIDDLEWARE_OVERLAY_HIDE_JS, NOT_LOGGED_IN_TEXT,
     POPUP_CLOSE_BUTTONS, PRICE_SELECTORS, PRODUCT_CARD_CLIMB_SELECTORS,
     PRODUCT_LINK_SELECTORS, RATING_SELECTORS, SALES_COUNT_SELECTORS,
-    SEARCH_INPUT, SEARCH_SUBMIT, SKU_CONTAINER_SELECTORS, SKU_OPTION_SELECTORS,
+    SEARCH_INPUT, SEARCH_SUBMIT, SKU_CONTAINER_SELECTORS, SKU_GROUP_JS_SELECTORS,
+    SKU_ITEM_JS_SELECTORS, SKU_OPTION_SELECTORS, SKU_VALUE_SELECTOR,
 )
 from session_manager import SessionSnapshot
 from slider_solver import SliderSolver
@@ -579,7 +580,8 @@ class BrowserAdapter:
             print(f"[browser] enrich rating failed for [{item.title[:30]}]: {e}")
             return None
 
-    def add_to_cart(self, item: MatchedItem) -> bool:
+    def add_to_cart(self, item: MatchedItem, sku_keywords: str | None = None) -> bool | None:
+        """Add item to cart. Returns True on success, False on SKU mismatch, None on error."""
         page = self._ensure_page()
         if item.url:
             self._human_wait(2, 5)
@@ -593,8 +595,10 @@ class BrowserAdapter:
 
             self._simulate_browsing(page, max_scroll=1000)
 
-        # Auto-select default SKU before adding to cart
-        self._select_default_sku(page)
+        sku_ok = self._select_default_sku(page, sku_keywords=sku_keywords)
+        if sku_ok is False:
+            print(f"[browser] SKU mismatch for [{item.title[:30]}]: no option matching '{sku_keywords}'")
+            return False
 
         button = self._find_first_visible_locator(page, ADD_TO_CART_BUTTONS)
         if button is None:
@@ -607,31 +611,70 @@ class BrowserAdapter:
         print(f"[browser] add item to cart: {item.title}")
         return True
 
-    def _select_default_sku(self, page: Page) -> None:
-        """Auto-select the first available option for each SKU dimension group."""
-        sku_container_js = ", ".join(SKU_CONTAINER_SELECTORS)
-        has_sku = page.evaluate(f"""() => {{
-            return document.querySelectorAll('{sku_container_js}').length > 0;
-        }}""")
+    def _select_default_sku(self, page: Page, sku_keywords: str | None = None) -> bool | None:
+        """Select SKU value items. Returns True/None/False."""
+        # Wait for individual SKU value elements to appear
+        has_sku = False
+        with suppress(Exception):
+            page.wait_for_selector(SKU_VALUE_SELECTOR, timeout=8000)
+            has_sku = True
         if not has_sku:
-            return
-
-        selected = 0
-        for sel in SKU_OPTION_SELECTORS:
             with suppress(Exception):
-                options = page.locator(sel).all()
-                for opt in options:
-                    with suppress(Exception):
-                        if opt.is_visible(timeout=1000):
-                            self._human_click(page, opt)
-                            self._human_wait(0.5, 1)
-                            selected += 1
-                            break
-            if selected > 0:
-                break  # one selector set is usually enough
+                page.wait_for_selector('[class*="skuItem"]', timeout=5000)
+                has_sku = True
+        if not has_sku:
+            return None
 
-        if selected > 0:
-            print(f"[browser] auto-selected default SKU ({selected} dimension(s))")
+        tokens = None
+        if sku_keywords:
+            tokens = [t.strip().upper() for t in sku_keywords.split() if t.strip()]
+            print(f"[browser] SKU keywords: {tokens}")
+
+        # Find individual value elements (not group wrappers)
+        value_items = page.locator(SKU_VALUE_SELECTOR).all()
+        if not value_items:
+            for sel in SKU_OPTION_SELECTORS:
+                value_items = page.locator(sel).all()
+                if value_items:
+                    break
+
+        if not value_items:
+            return None
+
+        # Build list of (text, element) for visible value items
+        visible_items: list[tuple[str, any]] = []
+        for item in value_items:
+            with suppress(Exception):
+                if item.is_visible(timeout=800):
+                    text = (item.inner_text() or '').strip()
+                    if text and len(text) < 40:  # skip multi-line group wrappers
+                        visible_items.append((text, item))
+
+        if not visible_items:
+            return None
+
+        if tokens:
+            matched = 0
+            for token in tokens:
+                for i, (text, el) in enumerate(visible_items):
+                    if token in text.upper():
+                        with suppress(Exception):
+                            self._human_click(page, el)
+                            self._human_wait(0.3, 0.6)
+                            matched += 1
+                            print(f"[browser] SKU matched '{token}' -> '{text}'")
+                            break
+            if matched == 0:
+                print(f"[browser] SKU match failed: none of {tokens} found in {[t for t,_ in visible_items]}")
+                return False
+            print(f"[browser] SKU matched {matched}/{len(tokens)} keywords")
+        else:
+            with suppress(Exception):
+                self._human_click(page, visible_items[0][1])
+                self._human_wait(0.3, 0.6)
+                print(f"[browser] SKU default selected: '{visible_items[0][0]}'")
+
+        return True
 
     def confirm_cart_state(self) -> str:
         page = self._ensure_page()
