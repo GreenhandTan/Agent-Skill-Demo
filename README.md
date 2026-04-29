@@ -18,7 +18,7 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/GreenhandTan/Agent-Skill-Demo.git
+git clone https://github.com/GreenhandTan/Taobao-Search-Skill.git
 cd Agent-Skill-Demo
 ```
 
