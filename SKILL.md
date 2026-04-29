@@ -26,6 +26,7 @@ description: "淘宝浏览器自动化，包括登录、商品搜索、按好评
 | `sku_keywords` | 用户指定规格如"16+512""16G 512G"→ 空格分隔关键词匹配SKU选项 | `None` |
 | `need_screenshot` | 提到"截图""证据"则为 `true` | `true` |
 | `manual_approval_required` | 提到"自动""无人值守"则为 `false` | `true` |
+| `headless` | 提到"无头""后台静默"则为 `true` | `false` |
 
 ### 2. 构造任务并执行
 
@@ -40,7 +41,7 @@ python scripts/run_workflow.py \
   --require-free-shipping --require-tmall yes
 ```
 
-可选参数：`--task-file <task.json>`（从 JSON 文件读取完整配置）、`--price-min`、`--price-max`、`--min-sales`、`--require-free-shipping`、`--require-tmall yes/no`、`--no-screenshot`、`--no-manual-approval`、`--headless`。
+可选参数：`--task-file <task.json>`（从 JSON 文件读取完整配置）、`--price-min`、`--price-max`、`--min-sales`、`--require-free-shipping`、`--require-tmall yes/no`、`--sku-keywords "16G 512G"`（指定SKU规格关键词）、`--no-screenshot`、`--no-manual-approval`、`--no-session-auto-save`、`--session-state-path`、`--headless`。
 
 **方式 B — 编程调用**：
 ```python
@@ -71,12 +72,17 @@ result = workflow.run(payload)
 执行完毕后，脚本输出一个 JSON，关键字段：
 
 ```
-result.status        → "success" / "partial_success" / "failed"
-result.login_status  → 登录态
-result.matched_items → 符合条件并加购成功的商品列表
-  └─ title, price, price_value, sales_count, rating, free_shipping, is_tmall, url, cart_added
-result.error.code    → 错误码（失败时）
-result.evidence      → 截图路径列表
+result.status          → "success" / "partial_success" / "failed"
+result.login_status    → 登录态 ("success" / "waiting_manual" / "failed")
+result.session_status  → 会话态 ("restored" / "captured" / "missing")
+result.search_status   → 搜索状态
+result.filter_status   → 筛选状态
+result.cart_status     → 加购状态 ("success" / "empty" / "error")
+result.matched_items   → 符合条件并加购成功的商品列表
+  └─ title, item_id, price, price_value, sales_count, rating, free_shipping, is_tmall, url, cart_added
+result.evidence        → 截图路径列表
+result.steps           → 每步执行记录 [{name, status, message, details}]
+result.error.code      → 错误码（失败时）
 ```
 
 向用户汇报时，用自然语言总结 `matched_items` 列表（商品名、价格、好评率），以及整体状态。
@@ -85,8 +91,8 @@ result.evidence      → 截图路径列表
 
 以下场景必须暂停并提示用户在浏览器中手动操作：
 
-- **登录**：提示"请在弹出的浏览器窗口中手动完成淘宝登录"
-- **验证码/风控**：自动尝试滑块求解，失败后提示用户手动完成验证
+- **登录**：提示"请在弹出的浏览器窗口中手动完成淘宝登录"，每 30 秒检测一次登录态，最长等待约 3.5 分钟；登录成功后自动保存会话
+- **验证码/风控**：自动尝试滑块求解（ddddocr + OpenCV 双引擎），失败后每 30 秒检测一次验证状态，最长等待约 3.5 分钟，期间不刷新页面以免打断用户操作
 - **会话失效**：提示用户重新登录
 
 ---
@@ -110,7 +116,8 @@ result.evidence      → 截图路径列表
 ### 支持的输入
 
 - `task_id`：任务唯一标识。
-- `chat_message_id`：消息通道的消息标识（飞书 `feishu_message_id` 等）。
+- `feishu_message_id`：消息通道的消息标识（飞书消息 ID 等）。
+- `report_channel`：结果回传通道标识，默认 `"feishu"`。
 - `search_keyword`：搜索关键词。
 - `rating_threshold`：最低好评率阈值，`0` 表示不筛选，默认 `0`。
 - `max_candidates`：最多检查的候选商品数量。
@@ -146,10 +153,12 @@ result.evidence      → 截图路径列表
 
 - 优先使用确定性的浏览器操作，而非自由发挥式推理。
 - 对短暂的导航或渲染失败使用重试。
+- 所有 DOM 选择器集中管理在 `scripts/selectors.py`，淘宝改版时只需更新该文件，无需修改 `browser_adapter.py`。
 - 优先恢复缓存会话，只有在会话不存在或失效时才进入人工登录。
 - 每次进入淘宝后，必须先确认当前登录态；未登录时不得继续搜索、筛选或加购。
 - 首次登录或会话失效时，提醒用户在浏览器中手动完成登录，然后立即提取存储状态并保存。
 - 当登录、验证码或安全校验出现时，立即暂停并请求人工接管。
+- 加购时如遇到 SKU 规格选择弹窗：若指定了 `sku_keywords`，按空格分隔的关键词逐一匹配选项文本，已选中的跳过以防止取消选中，任一关键词匹配失败则跳过该商品；若未指定关键词，则选择第一个可见选项作为默认规格。
 - 不尝试绕过平台安全控制。
 
 ### 消息通道适配
@@ -161,13 +170,8 @@ result.evidence      → 截图路径列表
 
 | 错误码 | 说明 |
 |--------|------|
-| `TASK_INVALID` | 任务字段缺失或格式错误 |
 | `LOGIN_REQUIRED` | 未登录，需手动完成首次登录并保存会话 |
-| `SEARCH_FAILED` | 无法加载或解析搜索结果页 |
 | `SEARCH_BLOCKED` | 淘宝风控拦截搜索，需手动完成验证 |
-| `FILTER_FAILED` | 无法可靠提取好评率 |
-| `CART_FAILED` | 无法将商品加入购物车 |
-| `REPORT_FAILED` | 无法投递结果回传 |
 | `WORKFLOW_ERROR` | 工作流执行异常 |
 
 ---
