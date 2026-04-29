@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from contextlib import suppress
 from pathlib import Path
 
 from browser_adapter import BrowserAdapter
@@ -77,13 +78,25 @@ def main() -> int:
     result = workflow.run(payload)
     report_envelope = workflow.report(payload, result)
 
+    output = json.dumps(
+        {
+            "result": result.to_dict(),
+            "report": report_envelope,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    with suppress(Exception):
+        print(output)
+        return 0 if result.status in {"success", "partial_success"} else 2
+    # Fallback for terminals that can't handle Unicode (e.g. Windows GBK)
     print(
         json.dumps(
             {
                 "result": result.to_dict(),
                 "report": report_envelope,
             },
-            ensure_ascii=False,
+            ensure_ascii=True,
             indent=2,
         )
     )
