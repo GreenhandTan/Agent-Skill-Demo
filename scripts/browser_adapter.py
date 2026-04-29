@@ -658,6 +658,10 @@ class BrowserAdapter:
             for token in tokens:
                 for i, (text, el) in enumerate(visible_items):
                     if token in text.upper():
+                        if self._is_sku_selected(el):
+                            matched += 1
+                            print(f"[browser] SKU already selected '{token}' -> '{text}'")
+                            break
                         with suppress(Exception):
                             self._human_click(page, el)
                             self._human_wait(0.3, 0.6)
@@ -669,12 +673,22 @@ class BrowserAdapter:
                 return False
             print(f"[browser] SKU matched {matched}/{len(tokens)} keywords")
         else:
-            with suppress(Exception):
-                self._human_click(page, visible_items[0][1])
-                self._human_wait(0.3, 0.6)
-                print(f"[browser] SKU default selected: '{visible_items[0][0]}'")
+            el = visible_items[0][1]
+            if not self._is_sku_selected(el):
+                with suppress(Exception):
+                    self._human_click(page, el)
+                    self._human_wait(0.3, 0.6)
+            print(f"[browser] SKU default selected: '{visible_items[0][0]}'")
 
         return True
+
+    @staticmethod
+    def _is_sku_selected(locator) -> bool:
+        """Check if a SKU value item is already selected (has isSelected class)."""
+        with suppress(Exception):
+            cls = locator.get_attribute("class") or ""
+            return "isSelected" in cls or "selected" in cls.lower() or "active" in cls.lower()
+        return False
 
     def confirm_cart_state(self) -> str:
         page = self._ensure_page()
