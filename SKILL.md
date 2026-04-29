@@ -16,7 +16,7 @@ description: "淘宝浏览器自动化，包括登录、商品搜索、按好评
 | 参数 | 提取规则 | 默认值 |
 |------|----------|--------|
 | `search_keyword` | 搜索目标，如"苹果手机""索尼耳机" | `"索尼耳机"` |
-| `rating_threshold` | "好评率大于 X%" → `X/100`；未提及则默认 | `0.99` |
+| `rating_threshold` | "好评率大于 X%" → `X/100`；未提及则默认 | `0.90` |
 | `max_candidates` | 用户指定的"最多 N 个"，未提及则默认 | `5` |
 | `price_min` | "N 元以上""最低 N" → 数值；未提及则不限制 | `None` |
 | `price_max` | "N 元以内""不超过 N""N 以下" → 数值 | `None` |
@@ -111,7 +111,7 @@ result.evidence      → 截图路径列表
 - `task_id`：任务唯一标识。
 - `chat_message_id`：消息通道的消息标识（飞书 `feishu_message_id` 等）。
 - `search_keyword`：搜索关键词。
-- `rating_threshold`：最低好评率阈值，默认 `0.99`。
+- `rating_threshold`：最低好评率阈值，默认 `0.90`。
 - `max_candidates`：最多检查的候选商品数量。
 - `need_screenshot`：是否捕获证据截图。
 - `manual_approval_required`：登录或校验时是否暂停等待人工接管。

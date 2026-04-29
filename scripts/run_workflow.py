@@ -22,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--task-id", help="Task id when no task file is provided")
     parser.add_argument("--feishu-message-id", help="Feishu message id when resolving the task remotely")
     parser.add_argument("--search-keyword", default="索尼耳机", help="Keyword to search on Taobao")
-    parser.add_argument("--rating-threshold", type=float, default=0.99, help="Minimum rating threshold")
+    parser.add_argument("--rating-threshold", type=float, default=0.90, help="Minimum rating threshold")
     parser.add_argument("--max-candidates", type=int, default=5, help="Maximum candidates to inspect")
     parser.add_argument("--no-screenshot", action="store_true", help="Disable evidence screenshots")
     parser.add_argument("--no-manual-approval", action="store_true", help="Disable manual takeover pause")

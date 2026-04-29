@@ -44,7 +44,7 @@ class OpenClawSkillConfig:
     task_id: str | None = None
     feishu_message_id: str | None = None
     search_keyword: str = "索尼耳机"
-    rating_threshold: float = 0.99
+    rating_threshold: float = 0.90
     max_candidates: int = 5
     need_screenshot: bool = True
     manual_approval_required: bool = True
@@ -66,7 +66,7 @@ class OpenClawSkillConfig:
             task_id=payload.get("task_id"),
             feishu_message_id=payload.get("feishu_message_id"),
             search_keyword=str(payload.get("search_keyword", "索尼耳机")),
-            rating_threshold=float(payload.get("rating_threshold", 0.99)),
+            rating_threshold=float(payload.get("rating_threshold", 0.90)),
             max_candidates=int(payload.get("max_candidates", 5)),
             need_screenshot=bool(payload.get("need_screenshot", True)),
             manual_approval_required=bool(payload.get("manual_approval_required", True)),

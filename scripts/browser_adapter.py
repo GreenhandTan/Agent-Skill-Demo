@@ -209,7 +209,7 @@ class BrowserAdapter:
 
         # Poll every 120s without reloading, so the user's login flow is not interrupted.
         # Total wait: up to ~10 minutes (5 checks).
-        check_interval = 120
+        check_interval = 60
         max_checks = 5
         for i in range(max_checks):
             waited = (i + 1) * check_interval
@@ -794,7 +794,7 @@ class BrowserAdapter:
     # ──────────────────────────────────────────────
 
     def _wait_for_access_recovery(self, page: Page) -> None:
-        check_interval = 120
+        check_interval = 60
         max_checks = 5
         for i in range(max_checks):
             waited = (i + 1) * check_interval

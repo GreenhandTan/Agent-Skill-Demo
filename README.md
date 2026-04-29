@@ -96,7 +96,7 @@ scripts/
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `search_keyword` | str | `"索尼耳机"` | 搜索关键词 |
-| `rating_threshold` | float | `0.99` | 最低好评率阈值（0~1，严格大于） |
+| `rating_threshold` | float | `0.90` | 最低好评率阈值（0~1，严格大于） |
 | `max_candidates` | int | `5` | 最多检查的候选商品数 |
 | `price_min` | float | `None` | 最低价格过滤（元） |
 | `price_max` | float | `None` | 最高价格过滤（元） |

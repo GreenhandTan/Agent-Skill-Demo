@@ -9,7 +9,7 @@ class TaskContext:
     task_id: str
     feishu_message_id: str | None = None
     search_keyword: str = "索尼耳机"
-    rating_threshold: float = 0.99
+    rating_threshold: float = 0.90
     max_candidates: int = 5
     need_screenshot: bool = True
     manual_approval_required: bool = True
