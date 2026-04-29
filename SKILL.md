@@ -133,6 +133,7 @@ result.error.code      → 错误码（失败时）
 - `require_free_shipping`：是否只要包邮商品，默认 `false`。
 - `require_tmall`：`true` 只要天猫、`false` 只要淘宝店、`None` 不限，默认 `None`。
 - `sku_keywords`：规格关键词，空格分隔（如 `"16G 512G"`），用于匹配商品详情页的 SKU 选项。
+- `headless`：是否以无头模式运行浏览器，默认 `false`。
 
 ### 期望输出
 
