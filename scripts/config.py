@@ -5,6 +5,39 @@ from pathlib import Path
 from typing import Any
 
 
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_bool(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes"}:
+            return True
+        if lowered in {"false", "0", "no"}:
+            return False
+        return None
+    return bool(value)
+
+
 @dataclass(slots=True)
 class OpenClawSkillConfig:
     task_file: Path | None = None
@@ -17,10 +50,15 @@ class OpenClawSkillConfig:
     manual_approval_required: bool = True
     report_channel: str = "feishu"
     browser_name: str = "chromium"
-    session_state_path: str = ".cache/ui-automation-test/taobao-session.json"
+    session_state_path: str = ".cache/taobao-search-skill/taobao-session.json"
     session_strategy: str = "storage_state"
     session_auto_save: bool = True
     no_security_bypass: bool = True
+    price_min: float | None = None
+    price_max: float | None = None
+    min_sales: int | None = None
+    require_free_shipping: bool = False
+    require_tmall: bool | None = None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "OpenClawSkillConfig":
@@ -34,8 +72,13 @@ class OpenClawSkillConfig:
             manual_approval_required=bool(payload.get("manual_approval_required", True)),
             report_channel=str(payload.get("report_channel", "feishu")),
             browser_name=str(payload.get("constraints", {}).get("browser", "chromium")),
-            session_state_path=str(payload.get("session_state_path", ".cache/ui-automation-test/taobao-session.json")),
+            session_state_path=str(payload.get("session_state_path", ".cache/taobao-search-skill/taobao-session.json")),
             session_strategy=str(payload.get("session_strategy", "storage_state")),
             session_auto_save=bool(payload.get("session_auto_save", True)),
             no_security_bypass=bool(payload.get("constraints", {}).get("no_security_bypass", True)),
+            price_min=_optional_float(payload.get("price_min")),
+            price_max=_optional_float(payload.get("price_max")),
+            min_sales=_optional_int(payload.get("min_sales")),
+            require_free_shipping=bool(payload.get("require_free_shipping", False)),
+            require_tmall=_optional_bool(payload.get("require_tmall")),
         )

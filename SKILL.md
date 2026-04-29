@@ -18,6 +18,11 @@ description: "淘宝浏览器自动化，包括登录、商品搜索、按好评
 | `search_keyword` | 搜索目标，如"苹果手机""索尼耳机" | `"索尼耳机"` |
 | `rating_threshold` | "好评率大于 X%" → `X/100`；未提及则默认 | `0.99` |
 | `max_candidates` | 用户指定的"最多 N 个"，未提及则默认 | `5` |
+| `price_min` | "N 元以上""最低 N" → 数值；未提及则不限制 | `None` |
+| `price_max` | "N 元以内""不超过 N""N 以下" → 数值 | `None` |
+| `min_sales` | "付款人数超过 N""销量大于 N""至少 N 人付款" → 数值 | `None` |
+| `require_free_shipping` | 提到"包邮""免邮""免运费"则为 `true` | `false` |
+| `require_tmall` | 提到"只要天猫""天猫店"→ `true`；"只要淘宝""C店"→ `false` | `None` |
 | `need_screenshot` | 提到"截图""证据"则为 `true` | `true` |
 | `manual_approval_required` | 提到"自动""无人值守"则为 `false` | `true` |
 
@@ -28,10 +33,13 @@ description: "淘宝浏览器自动化，包括登录、商品搜索、按好评
 python scripts/run_workflow.py \
   --search-keyword "<关键词>" \
   --rating-threshold <阈值> \
-  --max-candidates <数量>
+  --max-candidates <数量> \
+  --price-min <最低价> --price-max <最高价> \
+  --min-sales <最低销量> \
+  --require-free-shipping --require-tmall yes
 ```
 
-可选参数：`--task-file <task.json>`（从 JSON 文件读取完整配置）、`--no-screenshot`、`--no-manual-approval`、`--headless`。
+可选参数：`--task-file <task.json>`（从 JSON 文件读取完整配置）、`--price-min`、`--price-max`、`--min-sales`、`--require-free-shipping`、`--require-tmall yes/no`、`--no-screenshot`、`--no-manual-approval`、`--headless`。
 
 **方式 B — 编程调用**：
 ```python
@@ -43,6 +51,11 @@ payload = {
     "search_keyword": "...",
     "rating_threshold": 0.95,
     "max_candidates": 5,
+    "price_min": 50.0,
+    "price_max": 500.0,
+    "min_sales": 100,
+    "require_free_shipping": True,
+    "require_tmall": True,
     "need_screenshot": True,
     "manual_approval_required": True,
 }
@@ -60,7 +73,7 @@ result = workflow.run(payload)
 result.status        → "success" / "partial_success" / "failed"
 result.login_status  → 登录态
 result.matched_items → 符合条件并加购成功的商品列表
-  └─ title, price, rating, url, cart_added
+  └─ title, price, price_value, sales_count, rating, free_shipping, is_tmall, url, cart_added
 result.error.code    → 错误码（失败时）
 result.evidence      → 截图路径列表
 ```
@@ -105,6 +118,11 @@ result.evidence      → 截图路径列表
 - `session_state_path`：会话持久化文件路径，默认 `.cache/taobao-search-skill/taobao-session.json`。
 - `session_strategy`：会话恢复策略，默认 `storage_state`。
 - `session_auto_save`：人工登录成功后是否自动保存会话，默认 `true`。
+- `price_min`：最低价格过滤（元），未设置则不限制。
+- `price_max`：最高价格过滤（元），未设置则不限制。
+- `min_sales`：最低付款人数过滤，未设置则不限制。
+- `require_free_shipping`：是否只要包邮商品，默认 `false`。
+- `require_tmall`：`true` 只要天猫、`false` 只要淘宝店、`None` 不限，默认 `None`。
 
 ### 期望输出
 

@@ -34,8 +34,9 @@
 ### CLI
 
 ```bash
-python scripts/run_workflow.py --search-keyword "苹果手机" --rating-threshold 0.95
-python scripts/run_workflow.py --task-file task.json          # 从 JSON 读取完整配置
+python scripts/run_workflow.py --search-keyword "苹果手机" --rating-threshold 0.95 \
+    --price-min 100 --price-max 5000 --min-sales 100 --require-free-shipping --require-tmall yes
+python scripts/run_workflow.py --task-file task.json
 python scripts/run_workflow.py --search-keyword "耳机" --headless --no-manual-approval
 ```
 
@@ -97,6 +98,11 @@ scripts/
 | `search_keyword` | str | `"索尼耳机"` | 搜索关键词 |
 | `rating_threshold` | float | `0.99` | 最低好评率阈值（0~1，严格大于） |
 | `max_candidates` | int | `5` | 最多检查的候选商品数 |
+| `price_min` | float | `None` | 最低价格过滤（元） |
+| `price_max` | float | `None` | 最高价格过滤（元） |
+| `min_sales` | int | `None` | 最低付款人数过滤 |
+| `require_free_shipping` | bool | `false` | 只要包邮商品 |
+| `require_tmall` | bool/None | `None` | `true`=只要天猫, `false`=只要淘宝店, `None`=不限 |
 | `need_screenshot` | bool | `true` | 是否捕获证据截图 |
 | `manual_approval_required` | bool | `true` | 登录/验证时是否等待人工接管 |
 | `session_strategy` | str | `"storage_state"` | 会话恢复策略 |

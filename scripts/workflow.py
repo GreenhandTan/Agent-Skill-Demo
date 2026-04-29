@@ -29,6 +29,11 @@ class UiAutomationWorkflow:
             session_state_path=config.session_state_path,
             session_strategy=config.session_strategy,
             session_auto_save=config.session_auto_save,
+            price_min=config.price_min,
+            price_max=config.price_max,
+            min_sales=config.min_sales,
+            require_free_shipping=config.require_free_shipping,
+            require_tmall=config.require_tmall,
             raw_payload=payload,
         )
 
@@ -116,7 +121,12 @@ class UiAutomationWorkflow:
 
             result.evidence.append(self.browser.capture_evidence("search_results"))
 
-            candidates = self.browser.collect_candidates(context.search_keyword, context.max_candidates, context.rating_threshold)
+            candidates = self.browser.collect_candidates(
+                context.search_keyword, context.max_candidates, context.rating_threshold,
+                price_min=context.price_min, price_max=context.price_max,
+                min_sales=context.min_sales, require_free_shipping=context.require_free_shipping,
+                require_tmall=context.require_tmall,
+            )
             result.filter_status = "success"
             result.add_step("candidates_collected", "success", candidate_count=len(candidates))
 

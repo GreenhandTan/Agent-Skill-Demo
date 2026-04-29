@@ -14,9 +14,14 @@ class TaskContext:
     need_screenshot: bool = True
     manual_approval_required: bool = True
     report_channel: str = "feishu"
-    session_state_path: str = ".cache/ui-automation-test/taobao-session.json"
+    session_state_path: str = ".cache/taobao-search-skill/taobao-session.json"
     session_strategy: str = "storage_state"
     session_auto_save: bool = True
+    price_min: float | None = None
+    price_max: float | None = None
+    min_sales: int | None = None
+    require_free_shipping: bool = False
+    require_tmall: bool | None = None
     raw_payload: dict[str, Any] = field(default_factory=dict)
 
 
@@ -34,7 +39,11 @@ class MatchedItem:
     title: str
     item_id: str | None = None
     price: str | None = None
+    price_value: float | None = None
+    sales_count: int | None = None
     rating: float | None = None
+    free_shipping: bool = False
+    is_tmall: bool = False
     url: str | None = None
     cart_added: bool = False
 
@@ -78,7 +87,11 @@ class WorkflowResult:
                     "title": item.title,
                     "item_id": item.item_id,
                     "price": item.price,
+                    "price_value": item.price_value,
+                    "sales_count": item.sales_count,
                     "rating": item.rating,
+                    "free_shipping": item.free_shipping,
+                    "is_tmall": item.is_tmall,
                     "url": item.url,
                     "cart_added": item.cart_added,
                 }

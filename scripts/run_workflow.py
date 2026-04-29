@@ -26,10 +26,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-candidates", type=int, default=5, help="Maximum candidates to inspect")
     parser.add_argument("--no-screenshot", action="store_true", help="Disable evidence screenshots")
     parser.add_argument("--no-manual-approval", action="store_true", help="Disable manual takeover pause")
-    parser.add_argument("--session-state-path", default=".cache/ui-automation-test/taobao-session.json", help="Path to persisted session state")
+    parser.add_argument("--session-state-path", default=".cache/taobao-search-skill/taobao-session.json", help="Path to persisted session state")
     parser.add_argument("--session-strategy", default="storage_state", choices=["storage_state", "cookie_localstorage", "none"], help="Session restore strategy")
     parser.add_argument("--no-session-auto-save", action="store_true", help="Disable automatic session persistence after manual login")
     parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
+    parser.add_argument("--price-min", type=float, help="Minimum price filter")
+    parser.add_argument("--price-max", type=float, help="Maximum price filter")
+    parser.add_argument("--min-sales", type=int, help="Minimum sales count filter")
+    parser.add_argument("--require-free-shipping", action="store_true", help="Only include items with free shipping")
+    parser.add_argument("--require-tmall", type=str, choices=["yes", "no"], help="Filter by tmall/taobao store type")
     return parser
 
 
@@ -53,6 +58,11 @@ def main() -> int:
             "session_state_path": args.session_state_path,
             "session_strategy": args.session_strategy,
             "session_auto_save": not args.no_session_auto_save,
+            "price_min": args.price_min,
+            "price_max": args.price_max,
+            "min_sales": args.min_sales,
+            "require_free_shipping": args.require_free_shipping,
+            "require_tmall": {"yes": True, "no": False}.get(args.require_tmall),
             "constraints": {
                 "browser": "chromium",
                 "headless": args.headless,

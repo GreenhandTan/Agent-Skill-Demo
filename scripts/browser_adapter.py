@@ -20,7 +20,7 @@ _SCRIPTS_DIR = Path(__file__).parent.resolve()
 
 
 class BrowserAdapter:
-    def __init__(self, browser_name: str = "chromium", headless: bool = False, artifact_dir: str = ".cache/ui-automation-test/artifacts") -> None:
+    def __init__(self, browser_name: str = "chromium", headless: bool = False, artifact_dir: str = ".cache/taobao-search-skill/artifacts") -> None:
         self.browser_name = browser_name
         self.headless = headless
         artifact_path = Path(artifact_dir)
@@ -397,12 +397,19 @@ class BrowserAdapter:
     # Candidate Collection & Cart
     # ──────────────────────────────────────────────
 
-    def collect_candidates(self, keyword: str, max_candidates: int, rating_threshold: float) -> list[MatchedItem]:
+    def collect_candidates(self, keyword: str, max_candidates: int, rating_threshold: float,
+                           price_min: float | None = None, price_max: float | None = None,
+                           min_sales: int | None = None, require_free_shipping: bool = False,
+                           require_tmall: bool | None = None) -> list[MatchedItem]:
         page = self._ensure_page()
         links = self._find_candidate_links(page)
         candidates: list[MatchedItem] = []
         seen_urls: set[str] = set()
         keyword_tokens = self._build_keyword_tokens(keyword)
+        skipped_price = 0
+        skipped_sales = 0
+        skipped_shipping = 0
+        skipped_tmall = 0
 
         if not links:
             anchor_count = page.locator("a").count()
@@ -425,17 +432,56 @@ class BrowserAdapter:
             if not href or href in seen_urls or not title:
                 continue
             text = link.get("text", "")
+            card_text = link.get("card_text", text)
+            combined_text = f"{title}\n{text}\n{card_text}"
             if keyword_tokens and not self._matches_keyword(title, text, keyword_tokens):
                 continue
             absolute_href = urljoin(page.url, href)
             seen_urls.add(absolute_href)
-            rating = self._extract_rating(text)
-            item = MatchedItem(title=title, url=absolute_href, rating=rating)
+
+            rating = self._extract_rating(combined_text)
+            price_str, price_val = self._extract_price(card_text)
+            sales = self._extract_sales_count(card_text)
+            free_shipping = self._check_free_shipping(card_text)
+            is_tmall = self._check_is_tmall(absolute_href, card_text)
+
+            # Apply filters
+            if require_tmall is True and not is_tmall:
+                skipped_tmall += 1
+                continue
+            if require_tmall is False and is_tmall:
+                skipped_tmall += 1
+                continue
+            if price_min is not None and price_val is not None and price_val < price_min:
+                skipped_price += 1
+                continue
+            if price_max is not None and price_val is not None and price_val > price_max:
+                skipped_price += 1
+                continue
+            if require_free_shipping and not free_shipping:
+                skipped_shipping += 1
+                continue
+            if min_sales is not None and (sales is None or sales < min_sales):
+                skipped_sales += 1
+                continue
+
+            item = MatchedItem(
+                title=title, url=absolute_href, rating=rating,
+                price=price_str, price_value=price_val,
+                sales_count=sales, free_shipping=free_shipping, is_tmall=is_tmall,
+            )
             candidates.append(item)
             if len(candidates) % 3 == 0:
                 self._human_wait(0.3, 1)
 
-        print(f"[browser] collect up to {max_candidates} candidates with threshold {rating_threshold}, found={len(candidates)}")
+        filter_msgs = []
+        if skipped_price: filter_msgs.append(f"price={skipped_price}")
+        if skipped_sales: filter_msgs.append(f"sales={skipped_sales}")
+        if skipped_shipping: filter_msgs.append(f"shipping={skipped_shipping}")
+        if skipped_tmall: filter_msgs.append(f"tmall={skipped_tmall}")
+        filter_info = f", skipped({', '.join(filter_msgs)})" if filter_msgs else ""
+
+        print(f"[browser] collect up to {max_candidates} candidates with threshold {rating_threshold}, found={len(candidates)}{filter_info}")
         return candidates
 
     def enrich_item_rating(self, item: MatchedItem) -> float | None:
@@ -463,7 +509,7 @@ class BrowserAdapter:
                     item.item_id = id_vals[0]
 
             # Extract price from detail page
-            if not item.price:
+            if not item.price or item.price_value is None:
                 price_text = page.evaluate("""() => {
                     const selectors = [
                         '#J_StrPr498', '.tm-price', '.tb-rmb-num',
@@ -482,13 +528,31 @@ class BrowserAdapter:
                 if price_text:
                     match = re.search(r'([\d,]+(?:\.\d{2})?)', price_text.replace(',', ''))
                     if match:
-                        val = match.group(1)
+                        raw = match.group(1)
                         try:
-                            f = float(val)
+                            f = float(raw)
                             if f >= 0.01:
-                                item.price = f"{f:.2f}"
+                                item.price = f"¥{f:.2f}"
+                                item.price_value = f
                         except ValueError:
                             pass
+
+            # Extract sales count from detail page if not found on search page
+            if item.sales_count is None:
+                sales_text = page.evaluate("""() => {
+                    const selectors = [
+                        '[class*="sale"]', '[class*="Sell"]', '[class*="deal"]',
+                        '[class*="count"]:not([class*="comment"]):not([class*="rate"])',
+                        '.tm-ind-sellCount', '.tb-sell-counter',
+                    ];
+                    let text = '';
+                    for (const sel of selectors) {
+                        const el = document.querySelector(sel);
+                        if (el) text += ' ' + (el.textContent || '');
+                    }
+                    return text || document.body.innerText;
+                }""")
+                item.sales_count = self._extract_sales_count(sales_text)
 
             text = page.evaluate("""() => {
                 const body = document.body.innerText;
@@ -776,6 +840,45 @@ class BrowserAdapter:
         return None
 
     def _find_candidate_links(self, page: Page) -> list[dict[str, str]]:
+        with suppress(Exception):
+            results = page.evaluate("""() => {
+                const results = [];
+                const seen = new Set();
+                const selectors = [
+                    'a[href*="item.htm"]', 'a[href*="detail.tmall.com"]',
+                    'a[href*="taobao.com/item.htm"]', 'a[href*="tmall.com/item.htm"]',
+                    'a[href*="item.taobao.com"]',
+                ];
+                for (const sel of selectors) {
+                    const anchors = document.querySelectorAll(sel);
+                    for (const a of anchors) {
+                        const href = (a.getAttribute('href') || '').trim();
+                        if (!href || seen.has(href) || seen.size >= 50) continue;
+                        seen.add(href);
+                        const text = (a.innerText || '').trim();
+                        const title = text.split('\\n')[0].trim();
+                        if (!title) continue;
+                        let card = a.closest('[class*="item"]') || a.closest('[class*="Item"]')
+                                || a.closest('div[class*="card"]') || a.closest('[class*="Card"]')
+                                || a.closest('[class*="grid"]') || a.closest('[class*="Grid"]');
+                        if (!card) {
+                            let p = a.parentElement;
+                            for (let i = 0; i < 3 && p; i++) { p = p.parentElement; }
+                            card = p || a.parentElement;
+                        }
+                        const cardText = card ? (card.innerText || '').trim() : text;
+                        results.push({ href, text, title, card_text: cardText });
+                        if (results.length >= 50) break;
+                    }
+                    if (results.length > 0) break;
+                }
+                return results;
+            }""")
+            if isinstance(results, list) and results:
+                print(f"[browser] found {len(results)} candidate links via evaluate")
+                return results
+
+        # Fallback to Playwright locators
         links: list[dict[str, str]] = []
         selectors = [
             "a[href*='item.htm']",
@@ -792,13 +895,93 @@ class BrowserAdapter:
                         text = (locator.inner_text() or "").strip()
                         title = text.split("\n")[0].strip() if text else ""
                         if href and title:
-                            links.append({"href": href, "text": text, "title": title})
+                            links.append({"href": href, "text": text, "title": title, "card_text": text})
                 if links:
                     break
         return links
 
     # ──────────────────────────────────────────────
     # Text Processing
+    # ──────────────────────────────────────────────
+
+    # ──────────────────────────────────────────────
+    # Search Result Card Field Extractors
+    # ──────────────────────────────────────────────
+
+    def _extract_price(self, card_text: str) -> tuple[str | None, float | None]:
+        patterns = [
+            r'¥\s*([\d,]+(?:\.\d{1,2})?)',
+            r'￥\s*([\d,]+(?:\.\d{1,2})?)',
+            r'([\d,]+(?:\.\d{1,2})?)\s*元',
+            r'([\d,]+(?:\.\d{1,2})?)\s*起',
+            r'价格[：:]\s*([\d,]+(?:\.\d{1,2})?)',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, card_text)
+            if match:
+                raw = match.group(1).replace(",", "")
+                try:
+                    val = float(raw)
+                    if 0.01 <= val <= 999999:
+                        return f"¥{val:.2f}", val
+                except ValueError:
+                    continue
+
+        # Try ranges like "299-499"
+        range_match = re.search(r'¥?\s*([\d,]+(?:\.\d{1,2})?)\s*[-~—]\s*¥?\s*([\d,]+(?:\.\d{1,2})?)', card_text)
+        if range_match:
+            try:
+                low = float(range_match.group(1).replace(",", ""))
+                return f"¥{low:.2f}", low
+            except ValueError:
+                pass
+        return None, None
+
+    def _extract_sales_count(self, card_text: str) -> int | None:
+        patterns = [
+            r'([\d.]+)\s*万?\+\s*人付款',
+            r'([\d.]+)万\+?\s*人付款',
+            r'月销\s*([\d.]+)\s*万?\s*',
+            r'已售\s*([\d.]+)\s*万?\s*',
+            r'销量\s*([\d.]+)\s*万?\s*',
+            r'收货\s*([\d.]+)\s*万?\s*',
+            r'付款\s*([\d.]+)\s*万?\s*',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, card_text)
+            if match:
+                raw = match.group(1)
+                try:
+                    val = float(raw)
+                except ValueError:
+                    continue
+                # Check for "万" unit
+                span = card_text[match.start():match.end()]
+                if "万" in span:
+                    val *= 10000
+                return int(val)
+
+        # Pattern: "1000+人付款" or "1.2万人付款"
+        pattern2 = r'([\d.]+)\s*w?\s*人付款'
+        match = re.search(pattern2, card_text)
+        if match:
+            try:
+                val = float(match.group(1))
+                if "万" in card_text[max(0, match.start()-5):match.end()]:
+                    val *= 10000
+                return int(val)
+            except ValueError:
+                pass
+        return None
+
+    def _check_free_shipping(self, card_text: str) -> bool:
+        return bool(re.search(r'包邮|免邮|运费\s*[0０]|免运费', card_text))
+
+    def _check_is_tmall(self, url: str, card_text: str) -> bool:
+        if "tmall.com" in url.lower():
+            return True
+        return bool(re.search(r'天猫|Tmall|TMALL', card_text))
+
     # ──────────────────────────────────────────────
 
     def _build_keyword_tokens(self, keyword: str) -> list[str]:
