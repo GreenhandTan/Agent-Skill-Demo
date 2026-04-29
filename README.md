@@ -17,7 +17,7 @@
 ## 功能
 
 - **会话持久化** — 首次人工登录后自动保存 `storage_state`，后续运行跳过登录；登录检测每分钟轮询一次，不打断用户操作
-- **多维度筛选** — 价格区间、付款人数、包邮、天猫/淘宝店，全部在搜索结果页完成，不进详情页；好评率仅在用户明确要求时考察
+- **多维度筛选** — 价格区间、付款人数、包邮、天猫/淘宝店在搜索结果页完成；好评率始终从详情页提取用于展示，仅当用户设定阈值时执行筛选
 - **SKU规格匹配** — 支持指定商品配置关键词（如"16G 512G"），自动在详情页匹配并选中对应选项，仅加购符合规格的商品
 - **反检测拟人化** — playwright-stealth 注入 20 种反检测补丁，结合贝塞尔曲线鼠标轨迹、随机打字延迟、分段滚动，降低风控触发概率
 - **验证码自动求解** — ddddocr ML 模型 + OpenCV Canny 边缘检测双引擎，支持淘宝 GeeTest v3/v4 滑块验证码
@@ -66,7 +66,7 @@ payload = {
     "price_max": 6000,
     "sku_keywords": "16G 512G",
     "require_free_shipping": True,
-    # rating_threshold 省略则不考察好评率
+    # 省略 rating_threshold 则展示好评率但不筛选
 }
 
 client = FeishuClient()
@@ -105,7 +105,7 @@ scripts/
 
 ```
 接收任务 → 恢复会话 → 打开淘宝 → 确认登录态 → 搜索商品
-    → 多维筛选(价格/销量/包邮/天猫) → [可选:详情页提取好评率] → 加入购物车 → 验证加购 → 回传结果
+    → 多维筛选(价格/销量/包邮/天猫) → 详情页提取好评率与SKU价格校验 → 加入购物车 → 验证加购 → 回传结果
 ```
 
 ## 配置参数
@@ -125,6 +125,7 @@ scripts/
 | `manual_approval_required` | bool | `true` | 登录/验证时是否等待人工接管 |
 | `session_strategy` | str | `"storage_state"` | 会话恢复策略 |
 | `session_auto_save` | bool | `true` | 登录后自动保存会话 |
+| `report_channel` | str | `"feishu"` | 结果回传通道 |
 | `headless` | bool | `false` | 无头模式运行 |
 
 ## 环境要求

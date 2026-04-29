@@ -41,7 +41,7 @@ python scripts/run_workflow.py \
   --require-free-shipping --require-tmall yes
 ```
 
-可选参数：`--task-file <task.json>`（从 JSON 文件读取完整配置）、`--price-min`、`--price-max`、`--min-sales`、`--require-free-shipping`、`--require-tmall yes/no`、`--sku-keywords "16G 512G"`（指定SKU规格关键词）、`--no-screenshot`、`--no-manual-approval`、`--no-session-auto-save`、`--session-state-path`、`--headless`。
+可选参数：`--task-file <task.json>`（从 JSON 文件读取完整配置）、`--price-min`、`--price-max`、`--min-sales`、`--require-free-shipping`、`--require-tmall yes/no`、`--sku-keywords "16G 512G"`（指定SKU规格关键词）、`--report-channel feishu`（结果回传通道）、`--no-screenshot`、`--no-manual-approval`、`--no-session-auto-save`、`--session-state-path`、`--headless`。
 
 **方式 B — 编程调用**：
 ```python
@@ -109,9 +109,10 @@ result.error.code      → 错误码（失败时）
 4. 当会话不存在或失效时，走一次人工登录。
 5. 登录成功后自动保存新的会话状态。
 6. 搜索目标关键词。
-7. 按好评率阈值筛选商品。
-8. 将符合条件的商品加入购物车。
-9. 将结果回传到指定通道。
+7. 在搜索结果页按价格、销量、包邮、天猫等多维度筛选候选商品。
+8. 逐商品访问详情页：提取好评率、匹配 SKU 规格关键词并校验实际价格。
+9. 将符合条件的商品加入购物车。
+10. 将结果回传到指定通道。
 
 ### 支持的输入
 
@@ -153,7 +154,7 @@ result.error.code      → 错误码（失败时）
 
 - 优先使用确定性的浏览器操作，而非自由发挥式推理。
 - 对短暂的导航或渲染失败使用重试。
-- 所有 DOM 选择器集中管理在 `scripts/selectors.py`，淘宝改版时只需更新该文件，无需修改 `browser_adapter.py`。
+- 所有 DOM 选择器集中管理在 `scripts/taobao_selectors.py`，淘宝改版时只需更新该文件，无需修改 `browser_adapter.py`。
 - 优先恢复缓存会话，只有在会话不存在或失效时才进入人工登录。
 - 每次进入淘宝后，必须先确认当前登录态；未登录时不得继续搜索、筛选或加购。
 - 首次登录或会话失效时，提醒用户在浏览器中手动完成登录，然后立即提取存储状态并保存。
